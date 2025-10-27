@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Miner Evolution</title>
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+
+  <body>
+    <div id="app">
+      <canvas id="c"></canvas>
+      <div id="ui">
+        <h3>Miner Evolution</h3>
+        <div class="row">
+          <button id="btnStart">Start</button>
+          <button id="btnStop" class="ghost">Stop</button>
+        </div>
+        <div class="row">
+          <button id="btnNext" class="ghost">Next Gen</button>
+          <button id="btnReset" class="ghost">Reset</button>
+        </div>
+        <div class="stat">
+          <div class="small">Generation: <span id="gen">0</span></div>
+          <div class="small">Best fitness: <span id="best">0</span></div>
+          <div class="small">
+            Champion delivered: <span id="bestdel">0</span>
+          </div>
+          <div class="small">Population: <span id="popSizeLbl">0</span></div>
+        </div>
+
+        <label>λ (children) → population = 1 + λ (min 50, max 300)</label>
+        <input id="inpPop" type="range" min="49" max="299" value="49" />
+        <div class="small">
+          λ = <span id="valPop">49</span> (population =
+          <span id="valPopTotal">50</span>)
+        </div>
+
+        <label>σ (sigma)</label>
+        <input
+          id="inpSigma"
+          type="range"
+          min="0"
+          max="0.6"
+          step="0.01"
+          value="0.12"
+        />
+        <div class="small">sigma = <span id="valSigma">0.12</span></div>
+
+        <label>Gen time (seconds)</label>
+        <input
+          id="inpGenSec"
+          type="range"
+          min="5"
+          max="600"
+          step="5"
+          value="20"
+        />
+        <div class="small">
+          generation time = <span id="valGenSec">20</span> s
+        </div>
+
+        <label>stepsPerGen (for fine control)</label>
+        <input
+          id="inpSteps"
+          type="range"
+          min="100"
+          max="12000"
+          step="50"
+          value="1200"
+        />
+        <div class="small">steps = <span id="valSteps">1200</span></div>
+
+        <label>speed (sim iterations/frame)</label>
+        <input id="inpSpeed" type="range" min="1" max="12" value="2" />
+        <div class="small">speed = <span id="valSpeed">2</span></div>
+
+        <div class="toggle">
+          <input id="togSensors" type="checkbox" checked /><label
+            for="togSensors"
+            class="small"
+            >showSensors</label
+          >
+          <input
+            id="togTrails"
+            type="checkbox"
+            checked
+            style="margin-left: 8px"
+          /><label class="small">showTrails</label>
+        </div>
+        <div style="height: 8px"></div>
+        <div class="row">
+          <button id="btnSave">Save Champion</button>
+          <button id="btnLoad" class="ghost">Load Champion</button>
+        </div>
+        <textarea
+          id="champJson"
+          placeholder="Paste champion JSON here to load"
+        ></textarea>
+
+        <div class="small">Champion data:</div>
+        <div id="champInfo" class="monos"></div>
+
+        <div style="height: 8px"></div>
+        <div class="toggle">
+          <input id="togPhero" type="checkbox" checked /><label class="small"
+            >showPheromone</label
+          >
+          <input id="togDebug" type="checkbox" style="margin-left: 8px" /><label
+            class="small"
+            >debug overlay</label
+          >
+        </div>
+        <div style="height: 8px"></div>
+        <div class="small">Debug (inputs / outputs)</div>
+        <div id="debugBox" class="monos" style="display: none"></div>
+      </div>
+    </div>
+    <script type="module" src="js/script.js" defer></script>
+  </body>
+</html>
