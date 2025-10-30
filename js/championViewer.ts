@@ -1,16 +1,13 @@
-// Visualizador de Campeões - Histórico e Comparação Genética
-// Mostra evolução dos genes entre gerações
-
-const ChampionViewer = {
+const ChampionViewerImpl = {
   // Histórico dos últimos campeões
   history: [],
   maxHistory: 3,
-  storageKey: 'championHistory',
+  storageKey: "championHistory",
 
   /**
    * Carrega histórico do localStorage
    */
-  loadFromStorage() {
+  loadFromStorage(): void {
     try {
       const stored = localStorage.getItem(this.storageKey);
       if (stored) {
@@ -18,7 +15,7 @@ const ChampionViewer = {
         this.updateDisplay();
       }
     } catch (e) {
-      console.warn('Erro ao carregar histórico de campeões:', e);
+      console.warn("Erro ao carregar histórico de campeões:", e);
       this.history = [];
     }
   },
@@ -26,24 +23,29 @@ const ChampionViewer = {
   /**
    * Salva histórico no localStorage
    */
-  saveToStorage() {
+  saveToStorage(): void {
     try {
       localStorage.setItem(this.storageKey, JSON.stringify(this.history));
     } catch (e) {
-      console.warn('Erro ao salvar histórico de campeões:', e);
+      console.warn("Erro ao salvar histórico de campeões:", e);
     }
   },
 
   /**
    * Adiciona novo campeão ao histórico
    */
-  addChampion(championJson, generation, fitness, delivered) {
+  addChampion(
+    championJson: string,
+    generation: number,
+    fitness: number,
+    delivered: number
+  ): void {
     const championData = {
       generation,
       fitness,
       delivered,
       genome: JSON.parse(championJson),
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
 
     this.history.unshift(championData);
@@ -58,8 +60,8 @@ const ChampionViewer = {
   /**
    * Atualiza a exibição na UI
    */
-  updateDisplay() {
-    const container = document.getElementById('championHistory');
+  updateDisplay(): void {
+    const container = document.getElementById("championHistory");
     if (!container) return;
 
     container.innerHTML = this.generateHistoryHTML();
@@ -68,19 +70,25 @@ const ChampionViewer = {
   /**
    * Gera HTML formatado do histórico
    */
-  generateHistoryHTML() {
+  generateHistoryHTML(): string {
     if (this.history.length === 0) {
       return '<div class="champion-empty">Nenhum campeão ainda...</div>';
     }
 
-    let html = '';
-    
+    let html = "";
+
     for (let i = 0; i < this.history.length; i++) {
       const champion = this.history[i];
       const isLatest = i === 0;
-      const previousChampion = i < this.history.length - 1 ? this.history[i + 1] : null;
-      
-      html += this.generateChampionCard(champion, isLatest, previousChampion, i);
+      const previousChampion =
+        i < this.history.length - 1 ? this.history[i + 1] : null;
+
+      html += this.generateChampionCard(
+        champion,
+        isLatest,
+        previousChampion,
+        i
+      );
     }
 
     return html;
@@ -89,12 +97,19 @@ const ChampionViewer = {
   /**
    * Gera card de um campeão
    */
-  generateChampionCard(champion, isLatest, previousChampion, index) {
-    const title = isLatest ? 'Atual' : `Gen -${index}`;
-    const changes = previousChampion ? this.compareGenomes(champion.genome, previousChampion.genome) : null;
-    
+  generateChampionCard(
+    champion: any,
+    isLatest: boolean,
+    previousChampion: any,
+    index: number
+  ): string {
+    const title = isLatest ? "Atual" : `Gen -${index}`;
+    const changes = previousChampion
+      ? this.compareGenomes(champion.genome, previousChampion.genome)
+      : null;
+
     return `
-      <div class="champion-card ${isLatest ? 'current' : 'previous'}">
+      <div class="champion-card ${isLatest ? "current" : "previous"}">
         <div class="champion-header">
           <h4>${title} (Gen ${champion.generation})</h4>
           <div class="champion-stats">
@@ -107,10 +122,14 @@ const ChampionViewer = {
           ${this.formatGenome(champion.genome, changes)}
         </div>
         
-        ${changes ? `<div class="champion-changes">
+        ${
+          changes
+            ? `<div class="champion-changes">
           <strong>Mudanças:</strong> ${changes.totalChanges} alterações
           <div class="change-summary">${this.formatChangeSummary(changes)}</div>
-        </div>` : ''}
+        </div>`
+            : ""
+        }
       </div>
     `;
   },
@@ -118,61 +137,79 @@ const ChampionViewer = {
   /**
    * Formata genoma com destaque para mudanças
    */
-  formatGenome(genome, changes) {
+  formatGenome(genome: any, changes: any): string {
     const sections = [
-      { name: 'Sensores', data: genome.sensorAngles, key: 'sensorAngles' },
-      { name: 'Alcance', data: [genome.sensorRange], key: 'sensorRange' },
-      { name: 'Pesos', data: genome.weights.slice(0, 20), key: 'weights' }, // Primeiros 20 pesos
-      { name: 'Biases', data: genome.biases, key: 'biases' }
+      { name: "Sensores", data: genome.sensorAngles, key: "sensorAngles" },
+      { name: "Alcance", data: [genome.sensorRange], key: "sensorRange" },
+      { name: "Pesos", data: genome.weights.slice(0, 20), key: "weights" }, // Primeiros 20 pesos
+      { name: "Biases", data: genome.biases, key: "biases" },
     ];
 
-    return sections.map(section => {
-      const hasChanges = changes && changes.sections[section.key];
-      const changeCount = hasChanges ? changes.sections[section.key].length : 0;
-      
-      return `
-        <div class="genome-section ${hasChanges ? 'has-changes' : ''}">
+    return sections
+      .map((section) => {
+        const hasChanges = changes && changes.sections[section.key];
+        const changeCount = hasChanges
+          ? changes.sections[section.key].length
+          : 0;
+
+        return `
+        <div class="genome-section ${hasChanges ? "has-changes" : ""}">
           <div class="section-header">
             <span class="section-name">${section.name}</span>
-            ${changeCount > 0 ? `<span class="change-count">${changeCount} mudanças</span>` : ''}
+            ${
+              changeCount > 0
+                ? `<span class="change-count">${changeCount} mudanças</span>`
+                : ""
+            }
           </div>
           <div class="section-values">
-            ${this.formatValues(section.data, hasChanges ? changes.sections[section.key] : [])}
+            ${this.formatValues(
+              section.data,
+              hasChanges ? changes.sections[section.key] : []
+            )}
           </div>
         </div>
       `;
-    }).join('');
+      })
+      .join("");
   },
 
   /**
    * Formata valores com destaque para mudanças
    */
-  formatValues(values, changedIndices) {
-    return values.map((value, index) => {
-      const isChanged = changedIndices.includes(index);
-      const formattedValue = typeof value === 'number' ? value.toFixed(3) : value;
-      
-      return `<span class="value ${isChanged ? 'changed' : ''}" title="${isChanged ? 'Alterado' : ''}">${formattedValue}</span>`;
-    }).join(' ');
+  formatValues(values: any[], changedIndices: number[]): string {
+    return values
+      .map((value, index) => {
+        const isChanged = changedIndices.includes(index);
+        const formattedValue =
+          typeof value === "number" ? value.toFixed(3) : value;
+
+        return `<span class="value ${isChanged ? "changed" : ""}" title="${
+          isChanged ? "Alterado" : ""
+        }">${formattedValue}</span>`;
+      })
+      .join(" ");
   },
 
   /**
    * Compara dois genomas e retorna diferenças
    */
-  compareGenomes(current, previous) {
+  compareGenomes(current: any, previous: any): any {
     const changes = {
       sections: {
         sensorAngles: [],
         sensorRange: [],
         weights: [],
-        biases: []
+        biases: [],
       },
-      totalChanges: 0
+      totalChanges: 0,
     };
 
     // Compara sensor angles
     for (let i = 0; i < current.sensorAngles.length; i++) {
-      if (Math.abs(current.sensorAngles[i] - previous.sensorAngles[i]) > 0.001) {
+      if (
+        Math.abs(current.sensorAngles[i] - previous.sensorAngles[i]) > 0.001
+      ) {
         changes.sections.sensorAngles.push(i);
       }
     }
@@ -197,7 +234,10 @@ const ChampionViewer = {
     }
 
     // Calcula total de mudanças
-    changes.totalChanges = Object.values(changes.sections).reduce((sum, arr) => sum + arr.length, 0);
+    changes.totalChanges = Object.values(changes.sections).reduce(
+      (sum, arr) => sum + arr.length,
+      0
+    );
 
     return changes;
   },
@@ -205,14 +245,14 @@ const ChampionViewer = {
   /**
    * Formata resumo das mudanças
    */
-  formatChangeSummary(changes) {
+  formatChangeSummary(changes: any): string {
     const summaries = [];
-    
+
     if (changes.sections.sensorAngles.length > 0) {
       summaries.push(`${changes.sections.sensorAngles.length} sensores`);
     }
     if (changes.sections.sensorRange.length > 0) {
-      summaries.push('alcance');
+      summaries.push("alcance");
     }
     if (changes.sections.weights.length > 0) {
       summaries.push(`${changes.sections.weights.length} pesos`);
@@ -221,20 +261,20 @@ const ChampionViewer = {
       summaries.push(`${changes.sections.biases.length} biases`);
     }
 
-    return summaries.join(', ') || 'Nenhuma mudança detectada';
+    return summaries.join(", ") || "Nenhuma mudança detectada";
   },
 
   /**
    * Limpa histórico
    */
-  clearHistory() {
+  clearHistory(): void {
     this.history = [];
     localStorage.removeItem(this.storageKey);
     this.updateDisplay();
-  }
+  },
 };
 
 // Exporta para uso global
-if (typeof window !== 'undefined') {
-  window.ChampionViewer = ChampionViewer;
+if (typeof window !== "undefined") {
+  (window as any).ChampionViewer = ChampionViewerImpl;
 }

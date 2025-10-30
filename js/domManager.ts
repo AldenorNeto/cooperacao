@@ -1,14 +1,11 @@
-// Gerenciador de DOM - Cooperação de Agentes
-// Centraliza todas as operações de DOM e renderização
-
-const DOMManager = {
+const DOMManagerImpl = {
   // Elementos da UI
   elements: null,
 
   /**
    * Inicializa elementos do DOM
    */
-  init() {
+  init(): any {
     this.elements = {
       canvas: document.getElementById("c"),
       buttons: {
@@ -17,14 +14,14 @@ const DOMManager = {
         next: document.getElementById("btnNext"),
         reset: document.getElementById("btnReset"),
         save: document.getElementById("btnSave"),
-        load: document.getElementById("btnLoad")
+        load: document.getElementById("btnLoad"),
       },
       inputs: {
         pop: document.getElementById("inpPop"),
         sigma: document.getElementById("inpSigma"),
         genSec: document.getElementById("inpGenSec"),
         steps: document.getElementById("inpSteps"),
-        speed: document.getElementById("inpSpeed")
+        speed: document.getElementById("inpSpeed"),
       },
       values: {
         pop: document.getElementById("valPop"),
@@ -32,25 +29,25 @@ const DOMManager = {
         sigma: document.getElementById("valSigma"),
         genSec: document.getElementById("valGenSec"),
         steps: document.getElementById("valSteps"),
-        speed: document.getElementById("valSpeed")
+        speed: document.getElementById("valSpeed"),
       },
       labels: {
         gen: document.getElementById("gen"),
         best: document.getElementById("best"),
         bestdel: document.getElementById("bestdel"),
-        popSize: document.getElementById("popSizeLbl")
+        popSize: document.getElementById("popSizeLbl"),
       },
       toggles: {
         sensors: document.getElementById("togSensors"),
         trails: document.getElementById("togTrails"),
         phero: document.getElementById("togPhero"),
-        debug: document.getElementById("togDebug")
+        debug: document.getElementById("togDebug"),
       },
       other: {
         champJson: document.getElementById("champJson"),
         champInfo: document.getElementById("champInfo"),
-        debugBox: document.getElementById("debugBox")
-      }
+        debugBox: document.getElementById("debugBox"),
+      },
     };
 
     return this.elements;
@@ -59,7 +56,7 @@ const DOMManager = {
   /**
    * Redimensiona canvas
    */
-  resizeCanvas() {
+  resizeCanvas(): void {
     const cvs = this.elements.canvas;
     const rect = cvs.getBoundingClientRect();
     const ratio = devicePixelRatio || 1;
@@ -72,9 +69,9 @@ const DOMManager = {
   /**
    * Atualiza valores da UI
    */
-  updateUI(sim) {
+  updateUI(sim: any): void {
     const e = this.elements;
-    
+
     e.values.pop.innerText = String(sim.lambda);
     e.values.popTotal.innerText = String(1 + sim.lambda);
     e.labels.popSize.innerText = String(1 + sim.lambda);
@@ -90,9 +87,9 @@ const DOMManager = {
   /**
    * Configura inputs iniciais
    */
-  setupInputs(sim) {
+  setupInputs(sim: any): void {
     const e = this.elements;
-    
+
     e.inputs.pop.min = "49";
     e.inputs.pop.max = "299";
     e.inputs.pop.value = String(sim.lambda);
@@ -105,7 +102,7 @@ const DOMManager = {
   /**
    * Desenha texto de erro
    */
-  drawRedText(ctx, msg) {
+  drawRedText(ctx: CanvasRenderingContext2D, msg: string): void {
     ctx.save();
     ctx.fillStyle = "rgba(200,30,30,0.95)";
     ctx.font = "22px sans-serif";
@@ -118,7 +115,7 @@ const DOMManager = {
   /**
    * Desenha UI principal
    */
-  drawUI(ctx, sim) {
+  drawUI(ctx: CanvasRenderingContext2D, sim: any): void {
     ctx.save();
     ctx.fillStyle = "rgba(2,6,10,0.35)";
     ctx.fillRect(8, 8, 340, 96);
@@ -136,12 +133,14 @@ const DOMManager = {
   /**
    * Desenha feromônios
    */
-  drawPheromones(ctx, world, sim) {
+  drawPheromones(ctx: CanvasRenderingContext2D, world: World, sim: any): void {
     if (!sim.showPhero) return;
-    
-    const cols = world.pherCols, rows = world.pherRows;
-    const cw = sim.canvas.width / cols, ch = sim.canvas.height / rows;
-    
+
+    const cols = world.pherCols,
+      rows = world.pherRows;
+    const cw = sim.canvas.width / cols,
+      ch = sim.canvas.height / rows;
+
     ctx.globalCompositeOperation = "lighter";
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
@@ -158,13 +157,13 @@ const DOMManager = {
   /**
    * Desenha ambiente (obstáculos, pedras, base)
    */
-  drawEnvironment(ctx, world) {
+  drawEnvironment(ctx: CanvasRenderingContext2D, world: World): void {
     // Obstáculos
     ctx.fillStyle = "#2b2f37";
     for (const ob of world.obstacles) {
       ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
     }
-    
+
     // Pedras
     for (const s of world.stones) {
       ctx.beginPath();
@@ -179,7 +178,7 @@ const DOMManager = {
       ctx.textBaseline = "middle";
       ctx.fillText(s.quantity.toString(), s.x, s.y);
     }
-    
+
     // Base
     ctx.beginPath();
     ctx.fillStyle = "#fff1a8";
@@ -192,7 +191,7 @@ const DOMManager = {
   /**
    * Desenha agentes
    */
-  drawAgents(ctx, pop, sim, world) {
+  drawAgents(ctx: CanvasRenderingContext2D, pop: Agent[], sim: any, world: World): void {
     // Rastros
     if (sim.showTrails) {
       ctx.lineWidth = 1;
@@ -208,24 +207,24 @@ const DOMManager = {
         }
       }
     }
-    
+
     // Agentes
     for (const a of pop) {
       if (sim.showSensors) this.drawSensors(ctx, a, a.genome, world);
-      
+
       ctx.save();
       ctx.translate(a.x, a.y);
       ctx.rotate(a.a);
-      
+
       let col = a.carry ? "#2fd28f" : "#58a6ff";
       if (a.state === "MINING") col = "#ff9a4d";
       if (a.state === "DEPOSIT") col = "#ffd56b";
-      
+
       ctx.beginPath();
       ctx.fillStyle = col;
       ctx.arc(0, 0, 5, 0, Math.PI * 2);
       ctx.fill();
-      
+
       ctx.beginPath();
       ctx.moveTo(5, 0);
       ctx.lineTo(9, 0);
@@ -234,7 +233,7 @@ const DOMManager = {
       ctx.stroke();
       ctx.restore();
     }
-    
+
     // Destaca campeão
     if (pop[0]) {
       ctx.beginPath();
@@ -248,13 +247,13 @@ const DOMManager = {
   /**
    * Desenha sensores
    */
-  drawSensors(ctx, agent, genome, world) {
+  drawSensors(ctx: CanvasRenderingContext2D, agent: Agent, genome: Genome, world: World): void {
     // Implementação dos sensores (copiada do código original)
     // ... (código dos sensores permanece igual)
-  }
+  },
 };
 
 // Exporta para uso global
-if (typeof window !== 'undefined') {
-  window.DOMManager = DOMManager;
+if (typeof window !== "undefined") {
+  (window as any).DOMManager = DOMManagerImpl;
 }

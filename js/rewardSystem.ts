@@ -1,49 +1,50 @@
-// Sistema de Recompensas - Cooperação de Agentes
-// Centraliza todos os cálculos de fitness e recompensas
-
-const RewardSystem = {
+const RewardSystemImpl = {
   // Configurações de recompensas
   REWARDS: {
     // Sucessos principais
     STONE_PICKED: 400,
     STONE_DELIVERED: 1200,
-    
+
     // Ações corretas
     CORRECT_MINE_ATTEMPT: 2,
     CORRECT_DEPOSIT_ATTEMPT: 1,
-    
+
     // Penalidades por ações incorretas
     WRONG_MINE_ATTEMPT: -8,
     WRONG_DEPOSIT_ATTEMPT: -5,
-    
+
     // Custos de imobilidade
     IMMOBILE_COST: -0.5,
-    
+
     // Colisões
     BOUNDARY_COLLISION: -6,
     OBSTACLE_COLLISION: -8,
-    
+
     // Bonus base
     ALIVE_BONUS: 0.01,
-    
+
     // Bonus de proximidade
     PROXIMITY_MULTIPLIER: {
       CARRYING_TO_BASE: 2.5,
-      SEEKING_STONES: 0.8
-    }
+      SEEKING_STONES: 0.8,
+    },
   },
 
   /**
    * Calcula fitness baseado nas ações do agente
    */
-  calculateActionRewards(agent, actionInfo, world) {
+  calculateActionRewards(
+    agent: Agent,
+    actionInfo: ActionResult,
+    world: World
+  ): number {
     let reward = 0;
 
     // Recompensas por sucessos
     if (actionInfo.justPicked) {
       reward += this.REWARDS.STONE_PICKED;
     }
-    
+
     if (actionInfo.justDeposited) {
       reward += this.REWARDS.STONE_DELIVERED;
     }
@@ -74,7 +75,7 @@ const RewardSystem = {
   /**
    * Calcula penalidades por imobilidade
    */
-  calculateImmobilityPenalty(agent) {
+  calculateImmobilityPenalty(agent: Agent): number {
     if (agent.state === "MINING" || agent.state === "DEPOSIT") {
       return this.REWARDS.IMMOBILE_COST;
     }
@@ -84,20 +85,25 @@ const RewardSystem = {
   /**
    * Calcula bonus de proximidade
    */
-  calculateProximityBonus(agent, world) {
+  calculateProximityBonus(agent: Agent, world: World): number {
     if (agent.carry) {
       // Bonus por estar perto da base quando carregando
       const d = this._distanceToBase(agent, world);
       const normalizedDistance = d / Math.hypot(world.w, world.h);
       const proximityFactor = Math.max(0, 1 - normalizedDistance);
-      return proximityFactor * this.REWARDS.PROXIMITY_MULTIPLIER.CARRYING_TO_BASE;
+      return (
+        proximityFactor * this.REWARDS.PROXIMITY_MULTIPLIER.CARRYING_TO_BASE
+      );
     } else {
       // Bonus por estar perto de pedras quando não carregando
       const nearestStoneDistance = this._findNearestStoneDistance(agent, world);
       if (nearestStoneDistance < Infinity) {
-        const normalizedDistance = nearestStoneDistance / Math.hypot(world.w, world.h);
+        const normalizedDistance =
+          nearestStoneDistance / Math.hypot(world.w, world.h);
         const proximityFactor = Math.max(0, 1 - normalizedDistance);
-        return proximityFactor * this.REWARDS.PROXIMITY_MULTIPLIER.SEEKING_STONES;
+        return (
+          proximityFactor * this.REWARDS.PROXIMITY_MULTIPLIER.SEEKING_STONES
+        );
       }
     }
     return 0;
@@ -106,11 +112,11 @@ const RewardSystem = {
   /**
    * Calcula penalidades por colisões
    */
-  calculateCollisionPenalty(collisionType) {
+  calculateCollisionPenalty(collisionType: "boundary" | "obstacle"): number {
     switch (collisionType) {
-      case 'boundary':
+      case "boundary":
         return this.REWARDS.BOUNDARY_COLLISION;
-      case 'obstacle':
+      case "obstacle":
         return this.REWARDS.OBSTACLE_COLLISION;
       default:
         return 0;
@@ -120,7 +126,11 @@ const RewardSystem = {
   /**
    * Calcula fitness para uso durante simulação (não final)
    */
-  calculateTotalFitness(agent, actionInfo, world) {
+  calculateTotalFitness(
+    agent: Agent,
+    actionInfo: ActionResult,
+    world: World
+  ): number {
     // Rastreia tentativas para ranking
     if (actionInfo.attemptedMine) {
       const nearStone = this._findNearStone(agent, world);
@@ -133,14 +143,19 @@ const RewardSystem = {
 
     // Retorna fitness temporário (será substituído no ranking)
     const stage = this._calculateStage(agent);
-    const stagePoints = this._calculateStagePoints(agent, actionInfo, world, stage);
+    const stagePoints = this._calculateStagePoints(
+      agent,
+      actionInfo,
+      world,
+      stage
+    );
     return stage * 10000 + Math.max(0, Math.min(9999, stagePoints));
   },
 
   /**
    * Determina o estágio do agente (0-4+)
    */
-  _calculateStage(agent) {
+  _calculateStage(agent: Agent): number {
     if (agent.deliveries >= 2) return 4; // Múltiplas entregas
     if (agent.deliveries === 1) return 3; // Uma entrega completa
     if (agent.carry && agent.hasMinedBefore) return 2; // Retornando com pedra
@@ -151,18 +166,23 @@ const RewardSystem = {
   /**
    * Calcula pontos dentro do estágio atual
    */
-  _calculateStagePoints(agent, actionInfo, world, stage) {
+  _calculateStagePoints(
+    agent: Agent,
+    actionInfo: ActionResult,
+    world: World,
+    stage: number
+  ): number {
     let points = 0;
 
     // Recompensas por ações
     points += this.calculateActionRewards(agent, actionInfo, world);
-    
+
     // Penalidade por imobilidade
     points += this.calculateImmobilityPenalty(agent);
-    
+
     // Bonus de proximidade
     points += this.calculateProximityBonus(agent, world);
-    
+
     // Bonus base por estar vivo
     points += this.REWARDS.ALIVE_BONUS;
 
@@ -172,9 +192,9 @@ const RewardSystem = {
   /**
    * Sistema de ranking granular preservando fitness real
    */
-  evaluatePopulation(agents, world) {
+  evaluatePopulation(agents: Agent[], world: World): Agent[] {
     // Calcula score detalhado para cada agente
-    agents.forEach(agent => {
+    agents.forEach((agent) => {
       agent.detailedScore = this._calculateDetailedScore(agent, world);
     });
 
@@ -187,7 +207,7 @@ const RewardSystem = {
   /**
    * Calcula score detalhado para ranking granular
    */
-  _calculateDetailedScore(agent, world) {
+  _calculateDetailedScore(agent: Agent, world: World) {
     const score = {
       deliveries: agent.deliveries,
       hasMinedBefore: agent.hasMinedBefore ? 1 : 0,
@@ -196,7 +216,7 @@ const RewardSystem = {
       correctAttempts: agent.correctMineAttempts || 0,
       wrongAttempts: agent.wrongMineAttempts || 0,
       collisions: agent.collisions,
-      age: agent.age
+      age: agent.age,
     };
     return score;
   },
@@ -204,7 +224,7 @@ const RewardSystem = {
   /**
    * Compara dois agentes para ranking granular
    */
-  _compareAgents(a, b) {
+  _compareAgents(a: Agent, b: Agent): number {
     const scoreA = a.detailedScore;
     const scoreB = b.detailedScore;
 
@@ -229,8 +249,12 @@ const RewardSystem = {
     }
 
     // 5. Tentativas corretas vs incorretas
-    const ratioA = scoreA.correctAttempts / Math.max(1, scoreA.wrongAttempts + scoreA.correctAttempts);
-    const ratioB = scoreB.correctAttempts / Math.max(1, scoreB.wrongAttempts + scoreB.correctAttempts);
+    const ratioA =
+      scoreA.correctAttempts /
+      Math.max(1, scoreA.wrongAttempts + scoreA.correctAttempts);
+    const ratioB =
+      scoreB.correctAttempts /
+      Math.max(1, scoreB.wrongAttempts + scoreB.correctAttempts);
     if (Math.abs(ratioA - ratioB) > 0.1) {
       return ratioB - ratioA;
     }
@@ -247,7 +271,7 @@ const RewardSystem = {
   /**
    * Calcula distância ao objetivo atual
    */
-  _getTargetDistance(agent, world) {
+  _getTargetDistance(agent: Agent, world: World): number {
     if (agent.carry) {
       // Se carrega, objetivo é a base
       return this._distanceToBase(agent, world);
@@ -258,24 +282,30 @@ const RewardSystem = {
   },
 
   // Métodos auxiliares privados
-  _findNearStone(agent, world) {
+  _findNearStone(agent: Agent, world: World): Stone | null {
     for (const s of world.stones) {
-      if (s.quantity > 0 && this._distance(agent.x, agent.y, s.x, s.y) < s.r + 12) {
+      if (
+        s.quantity > 0 &&
+        this._distance(agent.x, agent.y, s.x, s.y) < s.r + 12
+      ) {
         return s;
       }
     }
     return null;
   },
 
-  _isNearBase(agent, world) {
-    return this._distance(agent.x, agent.y, world.base.x, world.base.y) < world.base.r + 14;
+  _isNearBase(agent: Agent, world: World): boolean {
+    return (
+      this._distance(agent.x, agent.y, world.base.x, world.base.y) <
+      world.base.r + 14
+    );
   },
 
-  _distanceToBase(agent, world) {
+  _distanceToBase(agent: Agent, world: World): number {
     return this._distance(agent.x, agent.y, world.base.x, world.base.y);
   },
 
-  _findNearestStoneDistance(agent, world) {
+  _findNearestStoneDistance(agent: Agent, world: World): number {
     let nearest = Infinity;
     for (const s of world.stones) {
       if (s.quantity > 0) {
@@ -285,14 +315,14 @@ const RewardSystem = {
     return nearest;
   },
 
-  _distance(x1, y1, x2, y2) {
+  _distance(x1: number, y1: number, x2: number, y2: number): number {
     return Math.hypot(x1 - x2, y1 - y2);
   },
 
   /**
    * Permite modificar recompensas dinamicamente
    */
-  updateReward(rewardName, newValue) {
+  updateReward(rewardName: string, newValue: number): boolean {
     if (this.REWARDS.hasOwnProperty(rewardName)) {
       this.REWARDS[rewardName] = newValue;
       return true;
@@ -305,10 +335,10 @@ const RewardSystem = {
    */
   getRewardConfig() {
     return { ...this.REWARDS };
-  }
+  },
 };
 
 // Exporta para uso global
-if (typeof window !== 'undefined') {
-  window.RewardSystem = RewardSystem;
+if (typeof window !== "undefined") {
+  (window as any).RewardSystem = RewardSystemImpl;
 }

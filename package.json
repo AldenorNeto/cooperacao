@@ -1,0 +1,21 @@
+{
+  "name": "cooperacao-agentes",
+  "version": "1.0.0",
+  "description": "Simulação de cooperação entre agentes usando algoritmos genéticos",
+  "scripts": {
+    "build": "tsc",
+    "dev": "npm run build && node dist/server.js",
+    "start": "npm run build && node dist/server.js",
+    "type-check": "tsc --noEmit",
+    "type-check:watch": "tsc --noEmit --watch",
+    "lint": "tsc --noEmit && echo 'Type checking passed!'"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0"
+  },
+  "keywords": ["genetic-algorithm", "agents", "simulation", "cooperation"],
+  "author": "",
+  "license": "MIT"
+}
