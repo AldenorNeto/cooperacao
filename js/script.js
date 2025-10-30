@@ -1,12 +1,26 @@
 (() => {
   const SEED = null;
-  const DEFAULTS = {
-    popSizeLambda: 49,
-    sigma: 0.12,
-    genSeconds: 20,
-    stepsPerGen: 1200,
-    speed: 2,
+  const CONFIG = {
+    DEFAULTS: {
+      popSizeLambda: 49,
+      sigma: 0.12,
+      genSeconds: 20,
+      stepsPerGen: 1200,
+      speed: 2,
+    },
+    AGENT: {
+      TRAIL_LENGTH: 60,
+      SENSOR_COUNT: 5,
+      BASE_RADIUS: 18,
+      MINE_TIMER_BASE: 30, // Tempo mínimo para minerar (30 frames)
+      DEPOSIT_TIMER_BASE: 15 // Tempo mínimo para depositar (15 frames)
+    },
+    PHYSICS: {
+      MAX_SPEED: 2.2
+    }
   };
+  const DEFAULTS = CONFIG.DEFAULTS;
+
   class RNG {
     constructor(seed = null) {
       if (seed == null) {
@@ -50,36 +64,9 @@
     }
   }
 
-  const cvs = document.getElementById("c"),
-    ctx = cvs.getContext("2d");
-  const btnStart = document.getElementById("btnStart"),
-    btnStop = document.getElementById("btnStop"),
-    btnNext = document.getElementById("btnNext"),
-    btnReset = document.getElementById("btnReset"),
-    btnSave = document.getElementById("btnSave"),
-    btnLoad = document.getElementById("btnLoad"),
-    champJson = document.getElementById("champJson"),
-    champInfo = document.getElementById("champInfo"),
-    genLabel = document.getElementById("gen"),
-    bestLabel = document.getElementById("best"),
-    bestdelLabel = document.getElementById("bestdel"),
-    popSizeLbl = document.getElementById("popSizeLbl"),
-    inpPop = document.getElementById("inpPop"),
-    valPop = document.getElementById("valPop"),
-    valPopTotal = document.getElementById("valPopTotal"),
-    inpSigma = document.getElementById("inpSigma"),
-    valSigma = document.getElementById("valSigma"),
-    inpGenSec = document.getElementById("inpGenSec"),
-    valGenSec = document.getElementById("valGenSec"),
-    inpSteps = document.getElementById("inpSteps"),
-    valSteps = document.getElementById("valSteps"),
-    inpSpeed = document.getElementById("inpSpeed"),
-    valSpeed = document.getElementById("valSpeed"),
-    togSensors = document.getElementById("togSensors"),
-    togTrails = document.getElementById("togTrails"),
-    togPhero = document.getElementById("togPhero"),
-    togDebug = document.getElementById("togDebug"),
-    debugBox = document.getElementById("debugBox");
+  const UI = DOMManager.init();
+  const cvs = UI.canvas;
+  const ctx = cvs.getContext("2d");
 
   let rng = new RNG(SEED);
   let SIM = null;
@@ -129,7 +116,7 @@
     constructor(w, h, cols = 64, rows = 48) {
       this.w = w;
       this.h = h;
-      this.base = { x: w / 2, y: h / 2, r: 18 };
+      this.base = { x: w / 2, y: h / 2, r: CONFIG.AGENT.BASE_RADIUS };
       this.stones = [];
       this.obstacles = [];
       this.pherCols = cols;
@@ -173,6 +160,8 @@
       this.depositTimer = 0;
       this.memory = { angle: 0, dist: 0 };
       this.delivered = 0;
+      this.deliveries = 0; // Para sistema lexicográfico
+      this.hasMinedBefore = false; // Para sistema lexicográfico
       this.collisions = 0;
       this.age = 0;
       this.trail = [];
@@ -181,18 +170,19 @@
       this.id = Math.floor(Math.random() * 1e9);
     }
     record() {
+      if (window.SIM && window.SIM.turboMode) return; // Skip trails in turbo mode
       this.trail.push({ x: this.x, y: this.y });
-      if (this.trail.length > 60) this.trail.shift();
+      if (this.trail.length > CONFIG.AGENT.TRAIL_LENGTH) this.trail.shift();
     }
   }
 
   class Genome {
     constructor(rng) {
-      this.sensorAngles = new Float32Array(5);
-      for (let i = 0; i < 5; i++)
+      this.sensorAngles = new Float32Array(CONFIG.AGENT.SENSOR_COUNT);
+      for (let i = 0; i < CONFIG.AGENT.SENSOR_COUNT; i++)
         this.sensorAngles[i] = (i - 2) * 0.35 + rng.float(-0.15, 0.15);
       this.sensorRange = rng.float(80, 220);
-      this.inputs = 18;
+      this.inputs = 22; // 15 sensores + 1 feromônio + 2 memória + 4 estado interno
       this.outputs = 3;
       this.weights = new Float32Array(this.inputs * this.outputs);
       this.biases = new Float32Array(this.outputs);
@@ -255,7 +245,7 @@
       const g = Object.create(Genome.prototype);
       g.sensorAngles = new Float32Array(o.sensorAngles);
       g.sensorRange = o.sensorRange;
-      g.inputs = 18;
+      g.inputs = 22;
       g.outputs = 3;
       g.weights = new Float32Array(o.weights);
       g.biases = new Float32Array(o.biases);
@@ -288,403 +278,377 @@
       this.bestFitness = 0;
       this.bestDelivered = 0;
       this.sanityFailed = false;
+      this.storageKey = 'cooperacao_simulation';
+      this.turboMode = false;
     }
-    initWorld() {
-      const w = this.canvas.width,
-        h = this.canvas.height;
-      this.world = new World(w, h, 64, 48);
-      this.world.base = {
-        x: w * 0.12 + w * 0.76 * rng.rand(),
-        y: h * 0.12 + h * 0.76 * rng.rand(),
-        r: 18,
-      };
-      const oCount = 6 + rng.int(7);
-      this.world.obstacles = [];
-      for (let i = 0; i < oCount; i++) {
-        let ow = 40 + rng.float(0, 120),
-          oh = 30 + rng.float(0, 100);
-        let ox,
-          oy,
-          tries = 0;
-        do {
-          ox = rng.float(0, w - ow);
-          oy = rng.float(0, h - oh);
-          tries++;
-        } while (
-          (rectCircleOverlap({ x: ox, y: oy, w: ow, h: oh }, this.world.base) ||
-            this.world.obstacles.some((o) =>
-              rectOverlap(o, { x: ox, y: oy, w: ow, h: oh })
-            )) &&
-          tries < 200
-        );
-        this.world.obstacles.push({ x: ox, y: oy, w: ow, h: oh });
-      }
-      this.regenStones(1 + Math.max(this.lambda, this.minPopulation));
-      this.world.pher.fill(0);
-      this.buildPopulation();
-      this.genStepCount = 0;
-      if (this.genSeconds)
-        this.stepsPerGen = Math.max(50, Math.round(this.genSeconds * 60));
-    }
-    regenStones(minTotalQuantity) {
-      const w = this.canvas.width,
-        h = this.canvas.height;
-      this.world.stones = [];
-      const sCount = 5 + rng.int(8);
-      for (let i = 0; i < sCount; i++) {
-        const r = 10 + rng.float(0, 6);
-        let x,
-          y,
-          tries = 0;
-        do {
-          x = rng.float(40, w - 40);
-          y = rng.float(40, h - 40);
-          tries++;
-        } while (
-          (dist(x, y, this.world.base.x, this.world.base.y) < 80 ||
-            this.world.obstacles.some((o) =>
-              rectCircleOverlap(o, { x, y, r })
-            )) &&
-          tries < 200
-        );
-        this.world.stones.push({ x, y, r, quantity: 1 + rng.int(3) });
-      }
-      let total = this.world.stones.reduce((s, sn) => s + sn.quantity, 0);
-      let idx = 0;
-      while (total <= minTotalQuantity) {
-        this.world.stones[idx % this.world.stones.length].quantity += 1;
-        total++;
-        idx++;
-      }
-      for (const s of this.world.stones) {
-        s.x += rng.float(-8, 8);
-        s.y += rng.float(-8, 8);
-        s.x = clamp(s.x, 30, w - 30);
-        s.y = clamp(s.y, 30, h - 30);
-      }
-    }
-    buildPopulation() {
-      const lambda = clamp(
-        this.lambda,
-        this.minPopulation - 1,
-        this.maxPopulation - 1
-      );
-      const popSize = 1 + lambda;
-      this.population = [];
-      const champAgent = new Agent(
-        this.world.base.x + this.world.base.r + 6,
-        this.world.base.y,
-        rng.float(0, Math.PI * 2),
-        this.champion.clone()
-      );
-      this.population.push(champAgent);
-      for (let i = 1; i < popSize; i++) {
-        const g = this.champion.mutate(rng, this.sigma);
-        const a = new Agent(
-          this.world.base.x + this.world.base.r + 6 + rng.float(-6, 6),
-          this.world.base.y + rng.float(-6, 6),
-          rng.float(0, Math.PI * 2),
-          g
-        );
-        this.population.push(a);
-      }
-    }
-    sanityCheck() {
-      let fail = null;
-      if (!this.population || this.population.length < 1)
-        fail = "population missing";
-      if (!this.world || !this.world.stones || this.world.stones.length < 1)
-        fail = "no stones";
-      if (
-        !(
-          this.world.base.x > 0 &&
-          this.world.base.x < this.canvas.width &&
-          this.world.base.y > 0 &&
-          this.world.base.y < this.canvas.height
-        )
-      )
-        fail = "base out of bounds";
-      this.sanityFailed = !!fail;
-      if (this.sanityFailed) drawRedText(this.ctx, fail);
-      return !this.sanityFailed;
-    }
-    stepAll() {
-      if (!this.sanityCheck()) return;
-      const maxSpeed = 2.2;
-      this.genStepCount++;
-      for (const agent of this.population) {
-        const info = this.stepAgent(agent, agent.genome, this.world, maxSpeed);
-        if (info.justPicked) agent.fitness += 400;
-        if (info.justDeposited) agent.fitness += 1200;
-        // small encouragement for attempting the behaviors (not forcing them)
-        if (info.attemptedMine) agent.fitness += 6; // tiny reward for trying to mine (discovers action)
-        if (info.attemptedDeposit) agent.fitness += 3; // tiny reward for trying to deposit
-        if (agent.carry) {
-          const d = dist(
-            agent.x,
-            agent.y,
-            this.world.base.x,
-            this.world.base.y
-          );
-          const proxBonus =
-            clamp(1 - d / Math.hypot(this.world.w, this.world.h), 0, 1) * 2.5;
-          agent.fitness += proxBonus;
-        } else {
-          let nearest = Infinity;
-          for (const s of this.world.stones)
-            if (s.quantity > 0)
-              nearest = Math.min(nearest, dist(agent.x, agent.y, s.x, s.y));
-          if (nearest < Infinity)
-            agent.fitness +=
-              clamp(
-                1 - nearest / Math.hypot(this.world.w, this.world.h),
-                0,
-                1
-              ) * 0.8;
-        }
-        agent.fitness += 0.01;
-        agent.age++;
-        agent.record();
-      }
-      this.world.decayPher(0.985);
-      if (this.genStepCount >= this.stepsPerGen) this.endGeneration();
-    }
+
     stepAgent(agent, genome, world, maxSpeed) {
+      const inputs = this._calculateSensorInputs(agent, genome, world);
+      const [acc, rot, mineOut] = genome.feed(inputs);
+      const actionResult = this._processAgentActions(agent, world, mineOut);
+      this._updateAgentPhysics(agent, acc, rot, maxSpeed);
+      this._handleCollisions(agent, world);
+      this._updatePheromones(agent, world);
+      return { inputs, outputs: [acc, rot, mineOut], ...actionResult };
+    }
+
+    _calculateSensorInputs(agent, genome, world) {
       const range = genome.sensorRange;
-      const inputs = new Array(18).fill(0);
+      const inputs = new Array(22).fill(0);
       let idx = 0;
       agent.lastSeen = { angle: null, dist: null };
-      for (let si = 0; si < 5; si++) {
+      
+      for (let si = 0; si < CONFIG.AGENT.SENSOR_COUNT; si++) {
         const ang = agent.a + genome.sensorAngles[si];
-        let tObstacle = Infinity;
-        for (let t = 4; t <= range; t += 5) {
-          const sx = agent.x + Math.cos(ang) * t,
-            sy = agent.y + Math.sin(ang) * t;
-          if (sx < 2 || sy < 2 || sx > world.w - 2 || sy > world.h - 2) {
-            tObstacle = t;
-            break;
-          }
-          for (const ob of world.obstacles) {
-            if (pointInRect(sx, sy, ob)) {
-              tObstacle = t;
-              break;
-            }
-          }
-          if (tObstacle < Infinity) break;
-        }
-        const prox =
-          1 - clamp((tObstacle === Infinity ? range : tObstacle) / range, 0, 1);
-        let stoneSig = 0,
-          baseSig = 0;
-        const dx = Math.cos(ang),
-          dy = Math.sin(ang);
-        let bestTs = Infinity,
-          bestStone = null;
-        for (const s of world.stones) {
-          if (s.quantity > 0) {
-            const ts = rayCircleIntersectT(
-              agent.x,
-              agent.y,
-              dx,
-              dy,
-              s.x,
-              s.y,
-              s.r
-            );
-            if (
-              ts != null &&
-              ts >= 0 &&
-              ts <= range &&
-              ts < tObstacle &&
-              ts < bestTs
-            ) {
-              bestTs = ts;
-              bestStone = s;
-            }
-          }
-        }
-        if (bestStone) {
-          stoneSig = 1 - bestTs / range;
-          agent.lastSeen.angle =
-            Math.atan2(bestStone.y - agent.y, bestStone.x - agent.x) - agent.a;
-          agent.lastSeen.dist = clamp(
-            dist(agent.x, agent.y, bestStone.x, bestStone.y) /
-              Math.hypot(world.w, world.h),
-            0,
-            1
-          );
-        }
-        const tb = rayCircleIntersectT(
-          agent.x,
-          agent.y,
-          dx,
-          dy,
-          world.base.x,
-          world.base.y,
-          world.base.r
-        );
-        if (tb != null && tb >= 0 && tb <= range && tb < tObstacle) {
-          baseSig = 1 - tb / range;
-          agent.lastSeen.angle =
-            Math.atan2(world.base.y - agent.y, world.base.x - agent.x) -
-            agent.a;
-          agent.lastSeen.dist = clamp(
-            dist(agent.x, agent.y, world.base.x, world.base.y) /
-              Math.hypot(world.w, world.h),
-            0,
-            1
-          );
-        }
+        let tObstacle = this._findObstacleDistance(agent, ang, range, world);
+        const prox = 1 - clamp((tObstacle === Infinity ? range : tObstacle) / range, 0, 1);
+        
+        const { stoneSig, baseSig } = this._calculateObjectSignals(agent, ang, range, tObstacle, world);
+        
         inputs[idx++] = prox;
         inputs[idx++] = stoneSig;
         inputs[idx++] = baseSig;
       }
+      
       inputs[idx++] = world.pher[world.pherCell(agent.x, agent.y)] || 0;
-      const mem_angle_norm =
-        agent.lastSeen.angle == null
-          ? 0
-          : clamp(agent.lastSeen.angle / Math.PI, -1, 1);
-      const mem_dist_norm =
-        agent.lastSeen.dist == null ? 0 : clamp(1 - agent.lastSeen.dist, 0, 1);
+      const mem_angle_norm = agent.lastSeen.angle == null ? 0 : clamp(agent.lastSeen.angle / Math.PI, -1, 1);
+      const mem_dist_norm = agent.lastSeen.dist == null ? 0 : clamp(1 - agent.lastSeen.dist, 0, 1);
       inputs[idx++] = mem_angle_norm;
       inputs[idx++] = mem_dist_norm;
-      const [acc, rot, mineOut] = genome.feed(inputs);
-      let justPicked = false,
-        justDeposited = false,
-        attemptedMine = false,
-        attemptedDeposit = false;
-      // mining/deposit are actions that must be chosen by agent (mineOut). They are not automatic.
-      // If agent chooses mineOut>0.6 near stone => begin mining (long). If chooses mineOut>0.6 at base while carrying => deposit (short).
-      if (agent.state === "MINING") {
-        agent.v *= 0.05;
-        agent.mineTimer--;
-        if (agent.mineTimer <= 0) {
-          for (const s of world.stones) {
-            if (s.quantity > 0 && dist(agent.x, agent.y, s.x, s.y) < s.r + 12) {
-              s.quantity = Math.max(0, s.quantity - 1);
-              agent.carry = true;
-              agent.state = "RETURN";
-              justPicked = true;
-              break;
-            }
-          }
-          if (agent.state === "MINING") agent.state = "SEEK";
+      
+      // Estado interno (4 entradas)
+      inputs[idx++] = agent.carry ? 1.0 : 0.0; // Está carregando?
+      inputs[idx++] = agent.state === "SEEK" ? 1.0 : 0.0; // Está procurando?
+      inputs[idx++] = agent.state === "MINING" ? 1.0 : 0.0; // Está minerando?
+      inputs[idx++] = agent.state === "DEPOSIT" ? 1.0 : 0.0; // Está depositando?
+      
+      return inputs;
+    }
+
+    _findObstacleDistance(agent, ang, range, world) {
+      let tObstacle = Infinity;
+      for (let t = 4; t <= range; t += 5) {
+        const sx = agent.x + Math.cos(ang) * t,
+          sy = agent.y + Math.sin(ang) * t;
+        if (sx < 2 || sy < 2 || sx > world.w - 2 || sy > world.h - 2) {
+          tObstacle = t;
+          break;
         }
-      } else if (agent.state === "DEPOSIT") {
-        agent.v *= 0.05;
-        agent.depositTimer--;
-        if (agent.depositTimer <= 0) {
-          if (
-            agent.carry &&
-            dist(agent.x, agent.y, world.base.x, world.base.y) <
-              world.base.r + 14
-          ) {
-            agent.delivered++;
-            agent.carry = false;
-            agent.state = "SEEK";
-            justDeposited = true;
-          } else agent.state = "SEEK";
-        }
-      } else {
-        agent.v = agent.v * 0.6 + acc * maxSpeed * 0.9;
-        agent.a += rot * 0.12;
-        agent.x += Math.cos(agent.a) * agent.v * this.phy_dt;
-        agent.y += Math.sin(agent.a) * agent.v * this.phy_dt;
-        // detect nearby stone/base for deciding whether mineOut is an attempt
-        let nearStone = null;
-        for (const s of world.stones) {
-          if (s.quantity > 0 && dist(agent.x, agent.y, s.x, s.y) < s.r + 12) {
-            nearStone = s;
+        for (const ob of world.obstacles) {
+          if (pointInRect(sx, sy, ob)) {
+            tObstacle = t;
             break;
           }
         }
-        const nearBase =
-          dist(agent.x, agent.y, world.base.x, world.base.y) <
-          world.base.r + 14;
-        if (mineOut > 0.6) {
-          if (nearStone && agent.state === "SEEK") {
-            attemptedMine = true;
-            agent.state = "MINING";
-            agent.mineTimer =
-              40 + Math.floor(Math.abs(rng.gaussian(0, 1)) * 80);
-          } else if (nearBase && agent.carry) {
-            attemptedDeposit = true;
-            agent.state = "DEPOSIT";
-            agent.depositTimer =
-              8 + Math.floor(Math.abs(rng.gaussian(0, 1)) * 10);
-          } else {
-            // agent attempted in wrong context — still small exploration credit (handled in stepAll)
-            if (nearStone) attemptedMine = true;
-            if (nearBase && agent.carry) attemptedDeposit = true;
+        if (tObstacle < Infinity) break;
+      }
+      return tObstacle;
+    }
+
+    _calculateObjectSignals(agent, ang, range, tObstacle, world) {
+      let stoneSig = 0, baseSig = 0;
+      const dx = Math.cos(ang), dy = Math.sin(ang);
+      
+      // Stone detection
+      let bestTs = Infinity, bestStone = null;
+      for (const s of world.stones) {
+        if (s.quantity > 0) {
+          const ts = rayCircleIntersectT(agent.x, agent.y, dx, dy, s.x, s.y, s.r);
+          if (ts != null && ts >= 0 && ts <= range && ts < tObstacle && ts < bestTs) {
+            bestTs = ts;
+            bestStone = s;
           }
         }
       }
+      
+      if (bestStone) {
+        stoneSig = 1 - bestTs / range;
+        agent.lastSeen.angle = Math.atan2(bestStone.y - agent.y, bestStone.x - agent.x) - agent.a;
+        agent.lastSeen.dist = clamp(dist(agent.x, agent.y, bestStone.x, bestStone.y) / Math.hypot(world.w, world.h), 0, 1);
+      }
+      
+      // Base detection
+      const tb = rayCircleIntersectT(agent.x, agent.y, dx, dy, world.base.x, world.base.y, world.base.r);
+      if (tb != null && tb >= 0 && tb <= range && tb < tObstacle) {
+        baseSig = 1 - tb / range;
+        agent.lastSeen.angle = Math.atan2(world.base.y - agent.y, world.base.x - agent.x) - agent.a;
+        agent.lastSeen.dist = clamp(dist(agent.x, agent.y, world.base.x, world.base.y) / Math.hypot(world.w, world.h), 0, 1);
+      }
+      
+      return { stoneSig, baseSig };
+    }
+
+    _processAgentActions(agent, world, mineOut) {
+      let justPicked = false, justDeposited = false, attemptedMine = false, attemptedDeposit = false;
+      
+      // PRIMEIRO: Verifica depósito automático (independente da decisão da rede neural)
+      if (agent.carry && dist(agent.x, agent.y, world.base.x, world.base.y) < world.base.r + 14) {
+        attemptedDeposit = true;
+        agent.delivered++;
+        agent.deliveries++;
+        agent.carry = false;
+        agent.state = "SEEK";
+        justDeposited = true;
+        return { justPicked, justDeposited, attemptedMine, attemptedDeposit };
+      }
+      
+      // DEPOIS: Processa decisão de mineração da rede neural
+      const wantsToMine = mineOut > 0.6;
+      
+      if (wantsToMine) {
+        attemptedMine = true;
+        
+        const nearStone = this._findNearStone(agent, world);
+        if (nearStone && !agent.carry) {
+          agent.state = "MINING";
+          agent.mineTimer = (agent.mineTimer || 0) + 1;
+          
+          if (agent.mineTimer >= CONFIG.AGENT.MINE_TIMER_BASE) {
+            nearStone.quantity = Math.max(0, nearStone.quantity - 1);
+            agent.carry = true;
+            agent.hasMinedBefore = true;
+            agent.state = "SEEK";
+            agent.mineTimer = 0;
+            justPicked = true;
+          }
+        } else {
+          agent.state = "MINING"; // Fica parado se tenta minerar no lugar errado
+        }
+      } else {
+        if (agent.state === "MINING" || agent.state === "DEPOSIT") {
+          agent.state = "SEEK";
+          agent.mineTimer = 0;
+          agent.depositTimer = 0;
+        }
+      }
+      
+      return { justPicked, justDeposited, attemptedMine, attemptedDeposit };
+    }
+
+    _findNearStone(agent, world) {
+      for (const s of world.stones) {
+        if (s.quantity > 0 && dist(agent.x, agent.y, s.x, s.y) < s.r + 12) {
+          return s;
+        }
+      }
+      return null;
+    }
+
+    _updateAgentPhysics(agent, acc, rot, maxSpeed) {
+      // Agente só pode se mover se NÃO estiver minerando ou depositando
+      if (agent.state === "MINING" || agent.state === "DEPOSIT") {
+        // Completamente imóvel durante mineração/depósito
+        agent.v = 0;
+        return;
+      }
+      
+      // Movimento normal apenas quando em estado SEEK
+      agent.v = agent.v * 0.6 + acc * maxSpeed * 0.9;
+      agent.a += rot * 0.12;
+      agent.x += Math.cos(agent.a) * agent.v * this.phy_dt;
+      agent.y += Math.sin(agent.a) * agent.v * this.phy_dt;
+    }
+
+    _handleCollisions(agent, world) {
+      // Boundary collisions
       if (agent.x < 2) {
         agent.x = 2;
         agent.v *= -0.2;
         agent.collisions++;
-        agent.fitness -= 6;
+        agent.fitness += RewardSystem.calculateCollisionPenalty('boundary');
       }
       if (agent.y < 2) {
         agent.y = 2;
         agent.v *= -0.2;
         agent.collisions++;
-        agent.fitness -= 6;
+        agent.fitness += RewardSystem.calculateCollisionPenalty('boundary');
       }
       if (agent.x > world.w - 2) {
         agent.x = world.w - 2;
         agent.v *= -0.2;
         agent.collisions++;
-        agent.fitness -= 6;
+        agent.fitness += RewardSystem.calculateCollisionPenalty('boundary');
       }
       if (agent.y > world.h - 2) {
         agent.y = world.h - 2;
         agent.v *= -0.2;
         agent.collisions++;
-        agent.fitness -= 6;
+        agent.fitness += RewardSystem.calculateCollisionPenalty('boundary');
       }
+      
+      // Obstacle collisions
       for (const ob of world.obstacles) {
         if (pointInRect(agent.x, agent.y, ob)) {
-          const cx = ob.x + ob.w / 2,
-            cy = ob.y + ob.h / 2;
-          const dx = agent.x - cx,
-            dy = agent.y - cy;
-          const ax = Math.abs(dx),
-            ay = Math.abs(dy);
+          const cx = ob.x + ob.w / 2, cy = ob.y + ob.h / 2;
+          const dx = agent.x - cx, dy = agent.y - cy;
+          const ax = Math.abs(dx), ay = Math.abs(dy);
           if (ax > ay) agent.x += (dx > 0 ? 1 : -1) * 4;
           else agent.y += (dy > 0 ? 1 : -1) * 4;
           agent.collisions++;
-          agent.fitness -= 8;
+          agent.fitness += RewardSystem.calculateCollisionPenalty('obstacle');
         }
       }
-      if (agent.carry) {
+    }
+
+    _updatePheromones(agent, world) {
+      if (!this.turboMode && agent.carry) {
         world.addPher(agent.x, agent.y, 0.02);
       }
       agent.a += (rng.rand() - 0.5) * 0.002;
-      return {
-        inputs,
-        outputs: [acc, rot, mineOut],
-        justPicked,
-        justDeposited,
-        attemptedMine,
-        attemptedDeposit,
-      };
     }
-    endGeneration() {
-      for (const a of this.population) if (a.carry) a.fitness += 40;
-      let best = this.population[0];
-      for (const a of this.population) if (a.fitness > best.fitness) best = a;
-      this.champion = best.genome.clone();
-      this.bestFitness = Math.round(best.fitness * 100) / 100;
-      this.bestDelivered = best.delivered;
-      this.generation++;
-      this.regenStones(this.population.length + 2);
+
+    initWorld() {
+      const w = this.canvas.width, h = this.canvas.height;
+      this.world = new World(w, h, 64, 48);
+      
+      // Usa MapGenerator para criar o mundo
+      this.world.base = MapGenerator.generateBase(w, h, rng);
+      this.world.obstacles = MapGenerator.generateObstacles(w, h, this.world.base, rng);
+      this.world.stones = MapGenerator.generateStones(w, h, this.world.base, this.world.obstacles, 
+        Math.max(this.lambda, this.minPopulation) * 3, rng); // 3x mais pedras
+      
+      this.world.pher.fill(0);
       this.buildPopulation();
       this.genStepCount = 0;
+      if (this.genSeconds) this.stepsPerGen = Math.max(50, Math.round(this.genSeconds * 60));
     }
+
+
+
+    regenStones(minTotalQuantity) {
+      const w = this.canvas.width, h = this.canvas.height;
+      this.world.stones = MapGenerator.generateStones(w, h, this.world.base, this.world.obstacles, minTotalQuantity, rng);
+    }
+
+
+
+    buildPopulation() {
+      const lambda = clamp(this.lambda, this.minPopulation - 1, this.maxPopulation - 1);
+      const popSize = 1 + lambda;
+      
+      if (this.population.length === 0) {
+        // Tenta carregar população salva
+        const loaded = this.loadFromStorage();
+        if (loaded) {
+          console.log(`População carregada: Gen ${this.generation}, ${this.population.length} agentes`);
+          // Ajusta tamanho da população carregada se necessário
+          this.adjustPopulationSize(popSize);
+          return;
+        }
+        
+        // Primeira geração: população aleatória
+        this.population = [];
+        for (let i = 0; i < popSize; i++) {
+          const g = new Genome(rng);
+          const a = new Agent(
+            this.world.base.x + this.world.base.r + 6 + rng.float(-6, 6),
+            this.world.base.y + rng.float(-6, 6),
+            rng.float(0, Math.PI * 2),
+            g
+          );
+          this.population.push(a);
+        }
+        this.champion = this.population[0].genome.clone();
+      }
+    }
+
+    adjustPopulationSize(targetSize) {
+      if (this.population.length === targetSize) return;
+      
+      if (this.population.length > targetSize) {
+        // Remove agentes excedentes (mantém os melhores)
+        this.population = this.population.slice(0, targetSize);
+      } else {
+        // Adiciona novos agentes baseados nos existentes
+        while (this.population.length < targetSize) {
+          const parent = this.population[rng.int(Math.min(5, this.population.length))];
+          const mutatedGenome = parent.genome.mutate(rng, this.sigma);
+          const newAgent = new Agent(
+            this.world.base.x + this.world.base.r + 6 + rng.float(-6, 6),
+            this.world.base.y + rng.float(-6, 6),
+            rng.float(0, Math.PI * 2),
+            mutatedGenome
+          );
+          this.population.push(newAgent);
+        }
+      }
+    }
+
+    sanityCheck() {
+      let fail = null;
+      if (!this.population || this.population.length < 1) fail = "population missing";
+      if (!this.world || !this.world.stones || this.world.stones.length < 1) fail = "no stones";
+      if (!(this.world.base.x > 0 && this.world.base.x < this.canvas.width && this.world.base.y > 0 && this.world.base.y < this.canvas.height)) fail = "base out of bounds";
+      
+      this.sanityFailed = !!fail;
+      if (this.sanityFailed) drawRedText(this.ctx, fail);
+      return !this.sanityFailed;
+    }
+
+    stepAll() {
+      if (!this.sanityCheck()) return;
+      const maxSpeed = CONFIG.PHYSICS.MAX_SPEED;
+      this.genStepCount++;
+      
+      for (const agent of this.population) {
+        const info = this.stepAgent(agent, agent.genome, this.world, maxSpeed);
+        this._updateAgentFitness(agent, info);
+        agent.age++;
+        if (!this.turboMode) agent.record();
+      }
+      
+      if (!this.turboMode) {
+        this.world.decayPher(0.985);
+      }
+      if (this.genStepCount >= this.stepsPerGen) this.endGeneration();
+    }
+
+    _updateAgentFitness(agent, info) {
+      // Usa o sistema de recompensas externo
+      const reward = RewardSystem.calculateTotalFitness(agent, info, this.world);
+      agent.fitness += reward;
+    }
+
+    endGeneration() {
+      // Usa o novo sistema genético
+      const evolutionResult = GeneticSystem.evolvePopulation(this.population, this.world, rng, Agent, Genome);
+      
+      this.population = evolutionResult.population;
+      this.champion = evolutionResult.champion;
+      this.bestFitness = Math.round(evolutionResult.bestFitness * 100) / 100;
+      this.bestDelivered = evolutionResult.bestDelivered;
+      this.generation++;
+      
+      this.regenStones(this.population.length + 2);
+      this.genStepCount = 0;
+      
+      // Salva estado atual
+      this.saveToStorage();
+      
+      // Atualiza visualizador de campeões (apenas se não estiver em turbo)
+      if (!this.turboMode) {
+        ChampionViewer.addChampion(
+          this.exportChampion(),
+          this.generation,
+          this.bestFitness,
+          this.bestDelivered
+        );
+      }
+      
+      // Atualiza gráfico de fitness
+      ChartManager.addFitnessPoint(this.generation, this.bestFitness, this.bestDelivered);
+      
+      // Debug do sistema genético
+      if (this.debug) {
+        const stats = GeneticSystem.getStats();
+        console.log(`Gen ${this.generation}: Sigma=${stats.adaptiveSigma}, Diversity=${stats.diversity}, Stagnant=${stats.isStagnant}`);
+      }
+    }
+
     exportChampion() {
       return this.champion.serialize();
     }
+
     importChampion(json) {
       try {
         this.champion = Genome.deserialize(json);
@@ -692,6 +656,72 @@
       } catch (e) {
         return false;
       }
+    }
+
+    saveToStorage() {
+      try {
+        const saveData = {
+          generation: this.generation,
+          bestFitness: this.bestFitness,
+          bestDelivered: this.bestDelivered,
+          champion: this.champion.serialize(),
+          population: this.population.map(agent => ({
+            genome: agent.genome.serialize(),
+            fitness: agent.fitness,
+            delivered: agent.delivered
+          })),
+          geneticState: GeneticSystem.state,
+          timestamp: Date.now()
+        };
+        localStorage.setItem(this.storageKey, JSON.stringify(saveData));
+      } catch (e) {
+        console.warn('Erro ao salvar simulação:', e);
+      }
+    }
+
+    loadFromStorage() {
+      try {
+        const saved = localStorage.getItem(this.storageKey);
+        if (!saved) return false;
+        
+        const data = JSON.parse(saved);
+        
+        this.generation = data.generation || 0;
+        this.bestFitness = data.bestFitness || 0;
+        this.bestDelivered = data.bestDelivered || 0;
+        
+        if (data.champion) {
+          this.champion = Genome.deserialize(data.champion);
+        }
+        
+        if (data.population && data.population.length > 0) {
+          this.population = data.population.map(agentData => {
+            const genome = Genome.deserialize(agentData.genome);
+            const agent = new Agent(
+              this.world.base.x + this.world.base.r + 6 + rng.float(-6, 6),
+              this.world.base.y + rng.float(-6, 6),
+              rng.float(0, Math.PI * 2),
+              genome
+            );
+            agent.fitness = agentData.fitness || 0;
+            agent.delivered = agentData.delivered || 0;
+            return agent;
+          });
+        }
+        
+        if (data.geneticState) {
+          GeneticSystem.state = { ...GeneticSystem.state, ...data.geneticState };
+        }
+        
+        return true;
+      } catch (e) {
+        console.warn('Erro ao carregar simulação:', e);
+        return false;
+      }
+    }
+
+    clearStorage() {
+      localStorage.removeItem(this.storageKey);
     }
   }
 
@@ -706,27 +736,36 @@
   }
 
   function draw(world, pop, sim) {
-    const ctx = sim.ctx,
-      cvs = sim.canvas;
-    ctx.clearRect(0, 0, cvs.width, cvs.height);
-    if (sim.showPhero) {
-      const cols = world.pherCols,
-        rows = world.pherRows;
-      const cw = cvs.width / cols,
-        ch = cvs.height / rows;
-      ctx.globalCompositeOperation = "lighter";
-      for (let y = 0; y < rows; y++)
-        for (let x = 0; x < cols; x++) {
-          const v = world.pher[y * cols + x];
-          if (v > 0.001) {
-            ctx.fillStyle = `rgba(20,120,220,${v * 0.18})`;
-            ctx.fillRect(x * cw, y * ch, cw, ch);
-          }
+    Renderer.draw(world, pop, sim);
+  }
+
+  function drawPheromones(ctx, world, sim) {
+    if (!sim.showPhero) return;
+    
+    const cols = world.pherCols, rows = world.pherRows;
+    const cw = sim.canvas.width / cols, ch = sim.canvas.height / rows;
+    
+    ctx.globalCompositeOperation = "lighter";
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const v = world.pher[y * cols + x];
+        if (v > 0.001) {
+          ctx.fillStyle = `rgba(20,120,220,${v * 0.18})`;
+          ctx.fillRect(x * cw, y * ch, cw, ch);
         }
-      ctx.globalCompositeOperation = "source-over";
+      }
     }
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  function drawEnvironment(ctx, world) {
+    // Draw obstacles
     ctx.fillStyle = "#2b2f37";
-    for (const ob of world.obstacles) ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
+    for (const ob of world.obstacles) {
+      ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
+    }
+    
+    // Draw stones
     for (const s of world.stones) {
       ctx.beginPath();
       ctx.fillStyle = s.quantity > 0 ? "#a9a089" : "#444";
@@ -740,37 +779,50 @@
       ctx.textBaseline = "middle";
       ctx.fillText(s.quantity.toString(), s.x, s.y);
     }
+    
+    // Draw base
     ctx.beginPath();
     ctx.fillStyle = "#fff1a8";
     ctx.strokeStyle = "#d9b24a";
     ctx.arc(world.base.x, world.base.y, world.base.r, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+  }
+
+  function drawAgents(ctx, pop, sim, world) {
+    // Draw trails
     if (sim.showTrails) {
       ctx.lineWidth = 1;
       for (const a of pop) {
         if (a.trail.length > 1) {
           ctx.beginPath();
           ctx.moveTo(a.trail[0].x, a.trail[0].y);
-          for (let i = 1; i < a.trail.length; i++)
+          for (let i = 1; i < a.trail.length; i++) {
             ctx.lineTo(a.trail[i].x, a.trail[i].y);
+          }
           ctx.strokeStyle = "rgba(255,255,255,0.03)";
           ctx.stroke();
         }
       }
     }
+    
+    // Draw agents
     for (const a of pop) {
       if (sim.showSensors) drawSensors(ctx, a, a.genome, world);
+      
       ctx.save();
       ctx.translate(a.x, a.y);
       ctx.rotate(a.a);
+      
       let col = a.carry ? "#2fd28f" : "#58a6ff";
       if (a.state === "MINING") col = "#ff9a4d";
       if (a.state === "DEPOSIT") col = "#ffd56b";
+      
       ctx.beginPath();
       ctx.fillStyle = col;
       ctx.arc(0, 0, 5, 0, Math.PI * 2);
       ctx.fill();
+      
       ctx.beginPath();
       ctx.moveTo(5, 0);
       ctx.lineTo(9, 0);
@@ -779,6 +831,8 @@
       ctx.stroke();
       ctx.restore();
     }
+    
+    // Highlight champion
     if (pop[0]) {
       ctx.beginPath();
       ctx.strokeStyle = "#ffffff";
@@ -786,6 +840,9 @@
       ctx.arc(pop[0].x, pop[0].y, 9, 0, Math.PI * 2);
       ctx.stroke();
     }
+  }
+
+  function drawUI(ctx, sim) {
     ctx.save();
     ctx.fillStyle = "rgba(2,6,10,0.35)";
     ctx.fillRect(8, 8, 340, 96);
@@ -802,7 +859,7 @@
 
   function drawSensors(ctx, agent, genome, world) {
     const range = genome.sensorRange;
-    for (let si = 0; si < 5; si++) {
+    for (let si = 0; si < CONFIG.AGENT.SENSOR_COUNT; si++) {
       const ang = agent.a + genome.sensorAngles[si];
       let tObstacle = Infinity;
       for (let t = 4; t <= range; t += 6) {
@@ -890,19 +947,10 @@
 
   function setup() {
     resizeCanvas();
-    SIM = new Simulation(cvs, ctx);
-    SIM.lambda = DEFAULTS.popSizeLambda;
-    SIM.sigma = DEFAULTS.sigma;
-    SIM.genSeconds = DEFAULTS.genSeconds;
-    SIM.stepsPerGen = DEFAULTS.stepsPerGen;
-    SIM.speed = DEFAULTS.speed;
-    inpPop.min = "49";
-    inpPop.max = "299";
-    inpPop.value = String(SIM.lambda);
-    inpSigma.value = String(SIM.sigma);
-    inpGenSec.value = String(SIM.genSeconds);
-    inpSteps.value = String(SIM.stepsPerGen);
-    inpSpeed.value = String(SIM.speed);
+    initializeSimulation();
+    setupInputs();
+    ChampionViewer.loadFromStorage();
+    ChartManager.init();
     setUIFromSim();
     SIM.initWorld();
     SIM.sanityCheck();
@@ -910,108 +958,81 @@
     requestAnimationFrame(loop);
   }
 
+  function initializeSimulation() {
+    SIM = new Simulation(cvs, ctx);
+    SIM.lambda = DEFAULTS.popSizeLambda;
+    SIM.sigma = DEFAULTS.sigma;
+    SIM.genSeconds = DEFAULTS.genSeconds;
+    SIM.stepsPerGen = DEFAULTS.stepsPerGen;
+    SIM.speed = DEFAULTS.speed;
+  }
+
+  function setupInputs() {
+    DOMManager.setupInputs(SIM);
+  }
+
   function resizeCanvas() {
-    const rect = cvs.getBoundingClientRect();
-    const ratio = devicePixelRatio || 1;
-    cvs.width = Math.max(640, Math.floor((window.innerWidth - 420) * ratio));
-    cvs.height = Math.max(420, Math.floor(window.innerHeight * ratio));
-    cvs.style.width = window.innerWidth - 420 + "px";
-    cvs.style.height = window.innerHeight + "px";
+    DOMManager.resizeCanvas();
   }
 
   function attachEvents() {
+    attachWindowEvents();
+    attachCanvasEvents();
+    attachButtonEvents();
+    attachInputEvents();
+    attachToggleEvents();
+    attachKeyboardEvents();
+  }
+
+  function attachWindowEvents() {
     window.addEventListener("resize", () => {
       resizeCanvas();
       SIM.initWorld();
     });
+  }
+
+  function attachCanvasEvents() {
     cvs.addEventListener("click", (e) => {
       const r = cvs.getBoundingClientRect();
-      const x = (e.clientX - r.left) * (cvs.width / r.width),
-        y = (e.clientY - r.top) * (cvs.height / r.height);
+      const x = (e.clientX - r.left) * (cvs.width / r.width);
+      const y = (e.clientY - r.top) * (cvs.height / r.height);
       SIM.world.base.x = x;
       SIM.world.base.y = y;
       SIM.initWorld();
     });
-    btnReset.addEventListener("click", () => {
-      rng = new RNG(SEED);
-      SIM = new Simulation(cvs, ctx);
-      SIM.lambda = parseInt(inpPop.value);
-      SIM.sigma = parseFloat(inpSigma.value);
-      SIM.genSeconds = parseInt(inpGenSec.value);
-      SIM.stepsPerGen = Math.max(100, Math.round(SIM.genSeconds * 60));
-      SIM.speed = parseInt(inpSpeed.value);
-      SIM.initWorld();
-      setUIFromSim();
-    });
-    btnStart.addEventListener("click", () => {
-      SIM.running = true;
-    });
-    btnStop.addEventListener("click", () => {
-      SIM.running = false;
-    });
-    btnNext.addEventListener("click", () => {
-      if (!SIM.sanityCheck()) return;
-      SIM.endGeneration();
-      setUIFromSim();
-    });
-    btnSave.addEventListener("click", () => {
-      const js = SIM.exportChampion();
-      champJson.value = js;
-      champInfo.innerText = js.slice(0, 800);
-    });
-    btnLoad.addEventListener("click", () => {
-      if (champJson.value.trim().length > 10) {
-        const ok = SIM.importChampion(champJson.value.trim());
-        if (ok) alert("Champion loaded");
-        else alert("Falha ao carregar");
-      }
-    });
-    inpPop.addEventListener("input", () => {
-      valPop.innerText = String(parseInt(inpPop.value));
-      SIM.lambda = parseInt(inpPop.value);
-      valPopTotal.innerText = String(1 + SIM.lambda);
-      popSizeLbl.innerText = String(1 + SIM.lambda);
-    });
-    inpSigma.addEventListener("input", () => {
-      valSigma.innerText = parseFloat(inpSigma.value).toFixed(2);
-      SIM.sigma = parseFloat(inpSigma.value);
-    });
-    inpGenSec.addEventListener("input", () => {
-      valGenSec.innerText = inpGenSec.value;
-      SIM.genSeconds = parseInt(inpGenSec.value);
-      SIM.stepsPerGen = Math.max(50, Math.round(SIM.genSeconds * 60));
-      inpSteps.value = String(SIM.stepsPerGen);
-      valSteps.innerText = String(SIM.stepsPerGen);
-    });
-    inpSteps.addEventListener("input", () => {
-      valSteps.innerText = inpSteps.value;
-      SIM.stepsPerGen = parseInt(inpSteps.value);
-      const secs = Math.max(1, Math.round(SIM.stepsPerGen / 60));
-      SIM.genSeconds = secs;
-      inpGenSec.value = String(secs);
-      valGenSec.innerText = String(secs);
-    });
-    inpSpeed.addEventListener("input", () => {
-      valSpeed.innerText = inpSpeed.value;
-      SIM.speed = parseInt(inpSpeed.value);
-    });
-    togSensors.addEventListener("change", () => {
-      SIM.showSensors = togSensors.checked;
-    });
-    togTrails.addEventListener("change", () => {
-      SIM.showTrails = togTrails.checked;
-    });
-    togPhero.addEventListener("change", () => {
-      SIM.showPhero = togPhero.checked;
-    });
-    togDebug.addEventListener("change", () => {
-      SIM.debug = togDebug.checked;
-      debugBox.style.display = SIM.debug ? "block" : "none";
-    });
+  }
+
+  function attachButtonEvents() {
+    UI.buttons.reset.addEventListener("click", handleReset);
+    UI.buttons.start.addEventListener("click", () => SIM.running = true);
+    UI.buttons.stop.addEventListener("click", () => SIM.running = false);
+    UI.buttons.next.addEventListener("click", handleNextGeneration);
+  }
+
+  function attachInputEvents() {
+    UI.inputs.pop.addEventListener("input", handlePopulationChange);
+    UI.inputs.sigma.addEventListener("input", handleSigmaChange);
+    UI.inputs.genSec.addEventListener("input", handleGenSecondsChange);
+    UI.inputs.steps.addEventListener("input", handleStepsChange);
+    UI.inputs.speed.addEventListener("input", handleSpeedChange);
+  }
+
+  function attachToggleEvents() {
+    UI.toggles.sensors.addEventListener("change", () => SIM.showSensors = UI.toggles.sensors.checked);
+    UI.toggles.trails.addEventListener("change", () => SIM.showTrails = UI.toggles.trails.checked);
+    UI.toggles.phero.addEventListener("change", () => SIM.showPhero = UI.toggles.phero.checked);
+    UI.toggles.debug.addEventListener("change", handleDebugToggle);
+    
+    // Turbo mode toggle
+    const turboToggle = document.getElementById('togTurbo');
+    if (turboToggle) {
+      turboToggle.addEventListener("change", handleTurboToggle);
+    }
+  }
+
+  function attachKeyboardEvents() {
     window.addEventListener("keydown", (e) => {
-      if (e.code === "Space") {
-        SIM.running = !SIM.running;
-      }
+      if (e.code === "Space") SIM.running = !SIM.running;
       if (e.key === "n" || e.key === "N") {
         SIM.endGeneration();
         setUIFromSim();
@@ -1019,18 +1040,126 @@
     });
   }
 
+  // Event handlers
+  function handleReset() {
+    rng = new RNG(SEED);
+    SIM = new Simulation(cvs, ctx);
+    SIM.lambda = parseInt(UI.inputs.pop.value);
+    SIM.sigma = parseFloat(UI.inputs.sigma.value);
+    SIM.genSeconds = parseInt(UI.inputs.genSec.value);
+    SIM.stepsPerGen = Math.max(100, Math.round(SIM.genSeconds * 60));
+    SIM.speed = parseInt(UI.inputs.speed.value);
+    SIM.clearStorage();
+    SIM.initWorld();
+    ChampionViewer.clearHistory();
+    ChartManager.clearHistory();
+    setUIFromSim();
+  }
+
+  function handleNextGeneration() {
+    if (!SIM.sanityCheck()) return;
+    SIM.endGeneration();
+    setUIFromSim();
+  }
+
+  function handleSaveChampion() {
+    const js = SIM.exportChampion();
+    UI.other.champJson.value = js;
+    UI.other.champInfo.innerText = js.slice(0, 800);
+  }
+
+  function handleLoadChampion() {
+    if (UI.other.champJson.value.trim().length > 10) {
+      const ok = SIM.importChampion(UI.other.champJson.value.trim());
+      if (ok) alert("Champion loaded");
+      else alert("Falha ao carregar");
+    }
+  }
+
+  function handlePopulationChange() {
+    UI.values.pop.innerText = String(parseInt(UI.inputs.pop.value));
+    SIM.lambda = parseInt(UI.inputs.pop.value);
+    UI.values.popTotal.innerText = String(1 + SIM.lambda);
+    UI.labels.popSize.innerText = String(1 + SIM.lambda);
+    
+    // Ajusta população atual se já existe
+    if (SIM.population.length > 0) {
+      SIM.adjustPopulationSize(1 + SIM.lambda);
+    }
+  }
+
+  function handleSigmaChange() {
+    UI.values.sigma.innerText = parseFloat(UI.inputs.sigma.value).toFixed(2);
+    SIM.sigma = parseFloat(UI.inputs.sigma.value);
+  }
+
+  function handleGenSecondsChange() {
+    UI.values.genSec.innerText = UI.inputs.genSec.value;
+    SIM.genSeconds = parseInt(UI.inputs.genSec.value);
+    SIM.stepsPerGen = Math.max(50, Math.round(SIM.genSeconds * 60));
+    UI.inputs.steps.value = String(SIM.stepsPerGen);
+    UI.values.steps.innerText = String(SIM.stepsPerGen);
+  }
+
+  function handleStepsChange() {
+    UI.values.steps.innerText = UI.inputs.steps.value;
+    SIM.stepsPerGen = parseInt(UI.inputs.steps.value);
+    const secs = Math.max(1, Math.round(SIM.stepsPerGen / 60));
+    SIM.genSeconds = secs;
+    UI.inputs.genSec.value = String(secs);
+    UI.values.genSec.innerText = String(secs);
+  }
+
+  function handleSpeedChange() {
+    UI.values.speed.innerText = UI.inputs.speed.value;
+    SIM.speed = parseInt(UI.inputs.speed.value);
+  }
+
+  function handleDebugToggle() {
+    SIM.debug = UI.toggles.debug.checked;
+    UI.other.debugBox.style.display = SIM.debug ? "block" : "none";
+  }
+
+  function handleTurboToggle() {
+    const turboToggle = document.getElementById('togTurbo');
+    SIM.turboMode = turboToggle.checked;
+    
+    if (SIM.turboMode) {
+      // Desabilita visualizações pesadas
+      SIM.showSensors = false;
+      SIM.showTrails = false;
+      SIM.showPhero = false;
+      
+      // Aumenta velocidade drasticamente
+      SIM.speed = Math.max(SIM.speed, 50);
+      
+      // Limpa trails existentes para economizar memória
+      SIM.population.forEach(agent => agent.trail = []);
+      
+      console.log('Modo Turbo ativado - Performance máxima');
+    } else {
+      // Restaura visualizações
+      SIM.showSensors = UI.toggles.sensors.checked;
+      SIM.showTrails = UI.toggles.trails.checked;
+      SIM.showPhero = UI.toggles.phero.checked;
+      
+      console.log('Modo Turbo desativado');
+    }
+  }
+
   function setUIFromSim() {
-    valPop.innerText = String(SIM.lambda);
-    valPopTotal.innerText = String(1 + SIM.lambda);
-    popSizeLbl.innerText = String(1 + SIM.lambda);
-    valSigma.innerText = SIM.sigma.toFixed(2);
-    valGenSec.innerText = SIM.genSeconds;
-    valSteps.innerText = SIM.stepsPerGen;
-    valSpeed.innerText = SIM.speed;
-    genLabel.innerText = SIM.generation;
-    bestLabel.innerText = SIM.bestFitness;
-    bestdelLabel.innerText = SIM.bestDelivered;
-    champInfo.innerText = SIM.exportChampion();
+    DOMManager.updateUI(SIM);
+    
+    // Atualiza visualizador se há dados
+    if (SIM.generation > 0) {
+      ChampionViewer.addChampion(
+        SIM.exportChampion(),
+        SIM.generation,
+        SIM.bestFitness,
+        SIM.bestDelivered
+      );
+      ChartManager.addFitnessPoint(SIM.generation, SIM.bestFitness, SIM.bestDelivered);
+    }
   }
 
   function loop() {
@@ -1038,22 +1167,42 @@
       requestAnimationFrame(loop);
       return;
     }
+    
     if (SIM.running) {
-      for (let i = 0; i < SIM.speed; i++) SIM.stepAll();
+      const iterations = SIM.turboMode ? Math.min(SIM.speed * 10, 500) : SIM.speed;
+      for (let i = 0; i < iterations; i++) {
+        SIM.stepAll();
+      }
     }
-    draw(SIM.world, SIM.population, SIM);
-    if (SIM.sanityFailed)
-      drawRedText(ctx, "Sanity check failed - reset required");
-    if (SIM.debug && SIM.population[0]) {
+    
+    // Renderização condicional
+    if (!SIM.turboMode) {
+      draw(SIM.world, SIM.population, SIM);
+      if (SIM.sanityFailed)
+        Renderer.drawRedText(ctx, "Sanity check failed - reset required");
+    } else {
+      // Modo turbo: apenas limpa canvas e mostra stats essenciais
+      ctx.clearRect(0, 0, cvs.width, cvs.height);
+      ctx.fillStyle = '#58a6ff';
+      ctx.font = '24px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('MODO TURBO', cvs.width/2, cvs.height/2 - 40);
+      ctx.font = '16px monospace';
+      ctx.fillText(`Gen: ${SIM.generation} | Fit: ${SIM.bestFitness} | Del: ${SIM.bestDelivered}`, cvs.width/2, cvs.height/2);
+      ctx.fillText(`Pop: ${SIM.population.length} | Speed: ${SIM.speed}x`, cvs.width/2, cvs.height/2 + 30);
+    }
+    
+    if (SIM.debug && SIM.population[0] && !SIM.turboMode) {
       const agent = SIM.population[0];
-      debugBox.innerText = `champ age:${agent.age} fit:${agent.fitness.toFixed(
-        1
-      )} delivered:${agent.delivered}\npop:${SIM.population.length}`;
+      UI.other.debugBox.innerText = `champ age:${agent.age} fit:${agent.fitness.toFixed(1)} delivered:${agent.delivered}\npop:${SIM.population.length}`;
     }
-    genLabel.innerText = SIM.generation;
-    bestLabel.innerText = SIM.bestFitness;
-    bestdelLabel.innerText = SIM.bestDelivered;
-    popSizeLbl.innerText = SIM.population.length;
+    
+    // Atualiza labels sempre
+    UI.labels.gen.innerText = SIM.generation;
+    UI.labels.best.innerText = SIM.bestFitness;
+    UI.labels.bestdel.innerText = SIM.bestDelivered;
+    UI.labels.popSize.innerText = SIM.population.length;
+    
     requestAnimationFrame(loop);
   }
 
