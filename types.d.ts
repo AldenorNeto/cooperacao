@@ -181,7 +181,6 @@ declare const RewardSystem: {
 declare const GeneticSystem: {
   evolvePopulation(population: Agent[], world: World, rng: any, AgentClass: any, GenomeClass: any): {
     population: Agent[];
-
     bestFitness: number;
     bestDelivered: number;
   };

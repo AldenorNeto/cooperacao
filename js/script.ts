@@ -491,21 +491,11 @@
         agent.fitness += RewardSystem.calculateCollisionPenalty("boundary");
       }
 
-      // Obstacle collisions
+      // Obstacle collisions - simplified repulsion
       for (const ob of world.obstacles) {
         if (pointInRect(agent.x, agent.y, ob)) {
-          const cx = ob.x + ob.w / 2,
-            cy = ob.y + ob.h / 2;
-          const dx = agent.x - cx,
-            dy = agent.y - cy;
-          const ax = Math.abs(dx),
-            ay = Math.abs(dy);
-          if (ax > ay)
-            agent.x +=
-              (dx > 0 ? 1 : -1) * CONFIG.PHYSICS.COLLISION_PUSH_DISTANCE;
-          else
-            agent.y +=
-              (dy > 0 ? 1 : -1) * CONFIG.PHYSICS.COLLISION_PUSH_DISTANCE;
+          agent.x += (agent.x > ob.x + ob.w/2 ? 1 : -1) * CONFIG.PHYSICS.COLLISION_PUSH_DISTANCE;
+          agent.y += (agent.y > ob.y + ob.h/2 ? 1 : -1) * CONFIG.PHYSICS.COLLISION_PUSH_DISTANCE;
           agent.collisions++;
           agent.fitness += RewardSystem.calculateCollisionPenalty("obstacle");
         }
@@ -635,7 +625,7 @@
       if (!this.sanityCheck()) return;
       const maxSpeed = CONFIG.PHYSICS.MAX_SPEED;
       this.genStepCount++;
-
+      
       for (const agent of this.population) {
         const info = this.stepAgent(agent, agent.genome, this.world, maxSpeed);
         this._updateAgentFitness(agent, info);

@@ -11,39 +11,38 @@ const MapGeneratorImpl = {
   },
 
   /**
-   * Gera obstáculos apenas evitando sobreposição com base
+   * Gera obstáculos usando grid + jitter
    */
   generateObstacles(w: number, h: number, base: Base, rng: any): Rect[] {
     const oCount = 6 + rng.int(7);
     const obstacles = [];
+    const gridCols = Math.ceil(Math.sqrt(oCount * 2));
+    const gridRows = Math.ceil(oCount / gridCols);
+    const cellW = w / gridCols;
+    const cellH = h / gridRows;
 
     for (let i = 0; i < oCount; i++) {
-      let ow = 40 + rng.float(0, 120);
-      let oh = 30 + rng.float(0, 100);
-      let ox,
-        oy,
-        tries = 0;
-
-      do {
-        ox = rng.float(0, w - ow);
-        oy = rng.float(0, h - oh);
-        tries++;
-      } while (
-        (this._rectCircleOverlap({ x: ox, y: oy, w: ow, h: oh }, base) ||
-          obstacles.some((o) =>
-            this._rectOverlap(o, { x: ox, y: oy, w: ow, h: oh })
-          )) &&
-        tries < 200
-      );
-
-      obstacles.push({ x: ox, y: oy, w: ow, h: oh });
+      const col = i % gridCols;
+      const row = Math.floor(i / gridCols);
+      
+      const ow = 40 + rng.float(0, 120);
+      const oh = 30 + rng.float(0, 100);
+      
+      // Grid position + jitter
+      const ox = col * cellW + rng.float(0, cellW - ow);
+      const oy = row * cellH + rng.float(0, cellH - oh);
+      
+      // Skip if overlaps base
+      if (!this._rectCircleOverlap({ x: ox, y: oy, w: ow, h: oh }, base)) {
+        obstacles.push({ x: ox, y: oy, w: ow, h: oh });
+      }
     }
 
     return obstacles;
   },
 
   /**
-   * Gera pedras com nova configuração (30 pedras, até 80 de tamanho)
+   * Gera pedras usando grid + jitter
    */
   generateStones(
     w: number,
@@ -54,27 +53,27 @@ const MapGeneratorImpl = {
     rng: any
   ): Stone[] {
     const stones = [];
-    const sCount = 25 + rng.int(11); // 25-35 pedras (média 30)
+    const sCount = 25 + rng.int(11);
+    const gridCols = Math.ceil(Math.sqrt(sCount));
+    const gridRows = Math.ceil(sCount / gridCols);
+    const cellW = w / gridCols;
+    const cellH = h / gridRows;
 
     for (let i = 0; i < sCount; i++) {
+      const col = i % gridCols;
+      const row = Math.floor(i / gridCols);
       const r = 10 + rng.float(0, 6);
-      let x,
-        y,
-        tries = 0;
-
-      do {
-        x = rng.float(40, w - 40);
-        y = rng.float(40, h - 40);
-        tries++;
-      } while (
-        (this._distance(x, y, base.x, base.y) < 80 ||
-          obstacles.some((o) => this._rectCircleOverlap(o, { x, y, r }))) &&
-        tries < 200
-      );
-
-      // Quantidade de 1 a 80 (média ~40)
-      const quantity = 1 + rng.int(80);
-      stones.push({ x, y, r, quantity });
+      
+      // Grid position + jitter
+      const x = col * cellW + cellW/2 + rng.float(-cellW*0.3, cellW*0.3);
+      const y = row * cellH + cellH/2 + rng.float(-cellH*0.3, cellH*0.3);
+      
+      // Skip if too close to base or overlaps obstacles
+      if (this._distance(x, y, base.x, base.y) >= 80 && 
+          !obstacles.some((o) => this._rectCircleOverlap(o, { x, y, r }))) {
+        const quantity = 1 + rng.int(80);
+        stones.push({ x: this._clamp(x, 40, w-40), y: this._clamp(y, 40, h-40), r, quantity });
+      }
     }
 
     // Ajusta quantidades para garantir mínimo
