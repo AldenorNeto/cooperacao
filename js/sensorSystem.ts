@@ -1,7 +1,7 @@
 const SensorSystemImpl = {
-  /**
-   * Calcula dados completos dos sensores (para IA e desenho)
-   */
+  FIXED_RANGE: 150,
+  SENSOR_ANGLES: [-0.5, 0, 0.5], // Left, Front, Right
+
   calculateSensorData(
     agent: Agent,
     genome: Genome,
@@ -10,9 +10,9 @@ const SensorSystemImpl = {
     const range = genome.sensorRange;
     const sensorData: SensorData[] = [];
 
-    for (let si = 0; si < 5; si++) {
-      const ang = agent.a + genome.sensorAngles[si];
-      const data = this._processSensor(agent, ang, range, world);
+    for (let i = 0; i < 3; i++) {
+      const ang = agent.a + this.SENSOR_ANGLES[i];
+      const data = this._processSensor(agent, ang, this.FIXED_RANGE, world);
       sensorData.push(data);
     }
 
@@ -27,7 +27,7 @@ const SensorSystemImpl = {
     agent: Agent,
     world: World
   ): number[] {
-    const inputs = new Array(22).fill(0);
+    const inputs = new Array(21).fill(0);
     let idx = 0;
 
     // Dados dos sensores (3 por sensor)
@@ -37,8 +37,7 @@ const SensorSystemImpl = {
       inputs[idx++] = sensor.baseSignal;
     }
 
-    // Feromônio + memória + estado interno
-    inputs[idx++] = world.pher[world.pherCell(agent.x, agent.y)] || 0;
+    // Memória + estado interno
     inputs[idx++] =
       agent.lastSeen.angle == null
         ? 0

@@ -1,12 +1,25 @@
 (() => {
   const SEED: number | null = null;
   const CONFIG = {
-    DEFAULTS: {
-      popSizeLambda: 49,
-      sigma: 0.12,
-      genSeconds: 20,
-      stepsPerGen: 1200,
-      speed: 2,
+    POPULATION: {
+      LAMBDA: 99,
+      MIN_SIZE: 50,
+      MAX_SIZE: 300,
+    },
+    GENETIC: {
+      SIGMA: 0.15,
+    },
+    SIMULATION: {
+      GEN_SECONDS: 30,
+      STEPS_PER_GEN: 1800,
+      SPEED: 5,
+      STEPS_PER_SECOND: 60,
+      MIN_STEPS_PER_GEN: 50,
+      TURBO_SPEED_MULTIPLIER: 10,
+      MAX_TURBO_ITERATIONS: 500,
+      MAX_POPULATION: 300,
+      MIN_POPULATION: 50,
+      STORAGE_KEY: "cooperacao_simulation",
     },
     AGENT: {
       TRAIL_LENGTH: 60,
@@ -24,23 +37,10 @@
       COLLISION_PUSH_DISTANCE: 4,
       BOUNDARY_MARGIN: 2,
     },
-    WORLD: {
-      PHEROMONE_COLS: 64,
-      PHEROMONE_ROWS: 48,
-      PHEROMONE_DECAY: 0.985,
-      PHEROMONE_STRENGTH: 0.02,
-    },
-    SIMULATION: {
-      MAX_POPULATION: 300,
-      MIN_POPULATION: 50,
-      STORAGE_KEY: "cooperacao_simulation",
-      STEPS_PER_SECOND: 60,
-      MIN_STEPS_PER_GEN: 50,
-      TURBO_SPEED_MULTIPLIER: 10,
-      MAX_TURBO_ITERATIONS: 500,
-    },
+
+
     GENOME: {
-      INPUTS: 22,
+      INPUTS: 21,
       OUTPUTS: 3,
       SENSOR_ANGLE_BASE: 0.35,
       SENSOR_ANGLE_VARIATION: 0.15,
@@ -59,7 +59,7 @@
       RANDOM_ROTATION: 0.002,
     },
   };
-  const DEFAULTS = CONFIG.DEFAULTS;
+
 
   class RNG {
     private _useMath: boolean;
@@ -130,43 +130,18 @@
     base: Base;
     stones: Stone[];
     obstacles: Rect[];
-    pherCols: number;
-    pherRows: number;
-    pher: Float32Array;
 
-    constructor(w: number, h: number, cols: number = 64, rows: number = 48) {
+
+    constructor(w: number, h: number) {
       this.w = w;
       this.h = h;
       this.base = { x: w / 2, y: h / 2, r: CONFIG.AGENT.BASE_RADIUS };
       this.stones = [];
       this.obstacles = [];
-      this.pherCols = cols;
-      this.pherRows = rows;
-      this.pher = new Float32Array(cols * rows);
+
     }
-    pherCell(x: number, y: number): number {
-      const cx = clamp(
-        Math.floor((x / this.w) * this.pherCols),
-        0,
-        this.pherCols - 1
-      );
-      const cy = clamp(
-        Math.floor((y / this.h) * this.pherRows),
-        0,
-        this.pherRows - 1
-      );
-      return cy * this.pherCols + cx;
-    }
-    addPher(x: number, y: number, val: number): void {
-      this.pher[this.pherCell(x, y)] = clamp(
-        this.pher[this.pherCell(x, y)] + val,
-        0,
-        1
-      );
-    }
-    decayPher(f: number): void {
-      for (let i = 0; i < this.pher.length; i++) this.pher[i] *= f;
-    }
+
+
   }
 
   class Agent {
@@ -217,7 +192,6 @@
       this.id = Math.floor(Math.random() * 1e9);
     }
     record() {
-      if (SIM && SIM.turboMode) return; // Skip trails in turbo mode
       this.trail.push({ x: this.x, y: this.y });
       if (this.trail.length > CONFIG.AGENT.TRAIL_LENGTH) this.trail.shift();
     }
@@ -244,7 +218,7 @@
         CONFIG.GENOME.SENSOR_RANGE_MIN,
         CONFIG.GENOME.SENSOR_RANGE_MAX
       );
-      this.inputs = CONFIG.GENOME.INPUTS;
+      this.inputs = 21;
       this.outputs = CONFIG.GENOME.OUTPUTS;
       this.weights = new Float32Array(this.inputs * this.outputs);
       this.biases = new Float32Array(this.outputs);
@@ -309,7 +283,7 @@
       const g = Object.create(Genome.prototype);
       g.sensorAngles = new Float32Array(o.sensorAngles);
       g.sensorRange = o.sensorRange;
-      g.inputs = CONFIG.GENOME.INPUTS;
+      g.inputs = 21;
       g.outputs = CONFIG.GENOME.OUTPUTS;
       g.weights = new Float32Array(o.weights);
       g.biases = new Float32Array(o.biases);
@@ -327,12 +301,13 @@
     lambda: number;
     sigma: number;
     world: World;
-    champion: Genome;
+
     generation: number;
     running: boolean;
     showSensors: boolean;
     showTrails: boolean;
-    showPhero: boolean;
+
+
     debug: boolean;
     population: Agent[];
     maxPopulation: number;
@@ -342,29 +317,23 @@
     bestDelivered: number;
     sanityFailed: boolean;
     storageKey: string;
-    turboMode: boolean;
 
     constructor(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
       this.canvas = canvas;
       this.ctx = ctx;
       this.phy_dt = 1;
-      this.genSeconds = DEFAULTS.genSeconds;
-      this.stepsPerGen = DEFAULTS.stepsPerGen;
-      this.speed = DEFAULTS.speed;
-      this.lambda = DEFAULTS.popSizeLambda;
-      this.sigma = DEFAULTS.sigma;
-      this.world = new World(
-        canvas.width,
-        canvas.height,
-        CONFIG.WORLD.PHEROMONE_COLS,
-        CONFIG.WORLD.PHEROMONE_ROWS
-      );
-      this.champion = new Genome(rng);
+      this.genSeconds = CONFIG.SIMULATION.GEN_SECONDS;
+      this.stepsPerGen = CONFIG.SIMULATION.STEPS_PER_GEN;
+      this.speed = CONFIG.SIMULATION.SPEED;
+      this.lambda = CONFIG.POPULATION.LAMBDA;
+      this.sigma = CONFIG.GENETIC.SIGMA;
+      this.world = new World(canvas.width, canvas.height);
+
       this.generation = 0;
       this.running = false;
-      this.showSensors = true;
-      this.showTrails = true;
-      this.showPhero = true;
+      this.showSensors = false;
+      this.showTrails = false;
+
       this.debug = false;
       this.population = [];
       this.maxPopulation = CONFIG.SIMULATION.MAX_POPULATION;
@@ -374,7 +343,6 @@
       this.bestDelivered = 0;
       this.sanityFailed = false;
       this.storageKey = CONFIG.SIMULATION.STORAGE_KEY;
-      this.turboMode = false;
     }
 
     stepAgent(
@@ -388,7 +356,7 @@
       const actionResult = this._processAgentActions(agent, world, mineOut);
       this._updateAgentPhysics(agent, acc, rot, maxSpeed);
       this._handleCollisions(agent, world);
-      this._updatePheromones(agent, world);
+      agent.a += (rng.rand() - 0.5) * CONFIG.ACTIONS.RANDOM_ROTATION;
       return { inputs, outputs: [acc, rot, mineOut], ...actionResult };
     }
 
@@ -544,17 +512,12 @@
       }
     }
 
-    _updatePheromones(agent: Agent, world: World): void {
-      if (!this.turboMode && agent.carry) {
-        world.addPher(agent.x, agent.y, CONFIG.WORLD.PHEROMONE_STRENGTH);
-      }
-      agent.a += (rng.rand() - 0.5) * CONFIG.ACTIONS.RANDOM_ROTATION;
-    }
+
 
     initWorld() {
       const w = this.canvas.width,
         h = this.canvas.height;
-      this.world = new World(w, h, 64, 48);
+      this.world = new World(w, h);
 
       // Usa MapGenerator para criar o mundo
       this.world.base = MapGenerator.generateBase(w, h, rng);
@@ -573,7 +536,6 @@
         rng
       ); // 3x mais pedras
 
-      this.world.pher.fill(0);
       this.buildPopulation();
       this.genStepCount = 0;
       if (this.genSeconds)
@@ -600,18 +562,13 @@
         this.maxPopulation - 1
       );
       const popSize = 1 + lambda;
+      console.log(
+        `BuildPopulation: lambda=${lambda}, popSize=${popSize}, current=${this.population.length}`
+      );
 
       if (this.population.length === 0) {
-        // Tenta carregar população salva
-        const loaded = this.loadFromStorage();
-        if (loaded) {
-          console.log(
-            `População carregada: Gen ${this.generation}, ${this.population.length} agentes`
-          );
-          // Ajusta tamanho da população carregada se necessário
-          this.adjustPopulationSize(popSize);
-          return;
-        }
+        // Limpa localStorage para debug
+        localStorage.removeItem(this.storageKey);
 
         // Primeira geração: população aleatória
         this.population = [];
@@ -625,7 +582,8 @@
           );
           this.population.push(a);
         }
-        this.champion = this.population[0].genome.clone();
+
+        console.log(`Nova população criada: ${this.population.length} agentes`);
       }
     }
 
@@ -682,12 +640,9 @@
         const info = this.stepAgent(agent, agent.genome, this.world, maxSpeed);
         this._updateAgentFitness(agent, info);
         agent.age++;
-        if (!this.turboMode) agent.record();
+        agent.record();
       }
 
-      if (!this.turboMode) {
-        this.world.decayPher(CONFIG.WORLD.PHEROMONE_DECAY);
-      }
       if (this.genStepCount >= this.stepsPerGen) this.endGeneration();
     }
 
@@ -712,7 +667,7 @@
       );
 
       this.population = evolutionResult.population;
-      this.champion = evolutionResult.champion;
+
       this.bestFitness = Math.round(evolutionResult.bestFitness * 100) / 100;
       this.bestDelivered = evolutionResult.bestDelivered;
       this.generation++;
@@ -723,15 +678,7 @@
       // Salva estado atual
       this.saveToStorage();
 
-      // Atualiza visualizador de campeões (apenas se não estiver em turbo)
-      if (!this.turboMode) {
-        ChampionViewer.addChampion(
-          this.exportChampion(),
-          this.generation,
-          this.bestFitness,
-          this.bestDelivered
-        );
-      }
+
 
       // Atualiza gráfico de fitness
       ChartManager.addFitnessPoint(
@@ -749,18 +696,7 @@
       }
     }
 
-    exportChampion() {
-      return this.champion.serialize();
-    }
 
-    importChampion(json: string): boolean {
-      try {
-        this.champion = Genome.deserialize(json);
-        return true;
-      } catch (e) {
-        return false;
-      }
-    }
 
     saveToStorage() {
       try {
@@ -768,7 +704,7 @@
           generation: this.generation,
           bestFitness: this.bestFitness,
           bestDelivered: this.bestDelivered,
-          champion: this.champion.serialize(),
+
           population: this.population.map((agent) => ({
             genome: agent.genome.serialize(),
             fitness: agent.fitness,
@@ -794,9 +730,7 @@
         this.bestFitness = data.bestFitness || 0;
         this.bestDelivered = data.bestDelivered || 0;
 
-        if (data.champion) {
-          this.champion = Genome.deserialize(data.champion);
-        }
+
 
         if (data.population && data.population.length > 0) {
           this.population = data.population.map((agentData) => {
@@ -834,6 +768,9 @@
 
   // Funções de desenho movidas para renderer.js
   function draw(world: World, pop: Agent[], sim: Simulation): void {
+    if (pop && pop.length > 0) {
+      console.log(`Desenhando ${pop.length} agentes`);
+    }
     Renderer.draw(world, pop, sim);
   }
 
@@ -841,7 +778,7 @@
     resizeCanvas();
     initializeSimulation();
     setupInputs();
-    ChampionViewer.loadFromStorage();
+
     ChartManager.init();
     setUIFromSim();
     SIM.initWorld();
@@ -852,16 +789,16 @@
 
   function initializeSimulation() {
     SIM = new Simulation(cvs, ctx);
-    SIM.lambda = DEFAULTS.popSizeLambda;
-    SIM.sigma = DEFAULTS.sigma;
-    SIM.genSeconds = DEFAULTS.genSeconds;
-    SIM.stepsPerGen = DEFAULTS.stepsPerGen;
-    SIM.speed = DEFAULTS.speed;
-    (window as any).SIM = SIM; // Make SIM globally accessible
+    SIM.lambda = CONFIG.POPULATION.LAMBDA;
+    SIM.sigma = CONFIG.GENETIC.SIGMA;
+    SIM.genSeconds = CONFIG.SIMULATION.GEN_SECONDS;
+    SIM.stepsPerGen = CONFIG.SIMULATION.STEPS_PER_GEN;
+    SIM.speed = CONFIG.SIMULATION.SPEED;
+    (window as any).SIM = SIM;
   }
 
   function setupInputs() {
-    DOMManager.setupInputs(SIM);
+    // Inputs removidos - não há mais elementos para configurar
   }
 
   function resizeCanvas() {
@@ -897,39 +834,21 @@
 
   function attachButtonEvents() {
     UI.buttons.reset.addEventListener("click", handleReset);
-    UI.buttons.start.addEventListener("click", () => (SIM.running = true));
-    UI.buttons.stop.addEventListener("click", () => (SIM.running = false));
-    UI.buttons.next.addEventListener("click", handleNextGeneration);
+    UI.buttons.start.addEventListener("click", () => {
+      console.log("Start clicked - População:", SIM.population.length);
+      SIM.running = true;
+    });
   }
 
   function attachInputEvents() {
-    UI.inputs.pop.addEventListener("input", handlePopulationChange);
-    UI.inputs.sigma.addEventListener("input", handleSigmaChange);
-    UI.inputs.genSec.addEventListener("input", handleGenSecondsChange);
-    UI.inputs.steps.addEventListener("input", handleStepsChange);
-    UI.inputs.speed.addEventListener("input", handleSpeedChange);
+    // Inputs removidos - valores fixos no CONFIG
   }
 
   function attachToggleEvents() {
-    UI.toggles.sensors.addEventListener(
-      "change",
-      () => (SIM.showSensors = UI.toggles.sensors.checked)
-    );
-    UI.toggles.trails.addEventListener(
-      "change",
-      () => (SIM.showTrails = UI.toggles.trails.checked)
-    );
-    UI.toggles.phero.addEventListener(
-      "change",
-      () => (SIM.showPhero = UI.toggles.phero.checked)
-    );
-    UI.toggles.debug.addEventListener("change", handleDebugToggle);
-
-    // Turbo mode toggle
-    const turboToggle = document.getElementById("togTurbo");
-    if (turboToggle) {
-      turboToggle.addEventListener("change", handleTurboToggle);
-    }
+    // Toggles removidos - valores fixos
+    SIM.showSensors = false;
+    SIM.showTrails = false;
+    SIM.debug = false;
   }
 
   function attachKeyboardEvents() {
@@ -946,17 +865,14 @@
   function handleReset() {
     rng = new RNG(SEED);
     SIM = new Simulation(cvs, ctx);
-    SIM.lambda = parseInt(UI.inputs.pop.value);
-    SIM.sigma = parseFloat(UI.inputs.sigma.value);
-    SIM.genSeconds = parseInt(UI.inputs.genSec.value);
-    SIM.stepsPerGen = Math.max(
-      CONFIG.SIMULATION.MIN_STEPS_PER_GEN * 2,
-      Math.round(SIM.genSeconds * CONFIG.SIMULATION.STEPS_PER_SECOND)
-    );
-    SIM.speed = parseInt(UI.inputs.speed.value);
+    SIM.lambda = CONFIG.POPULATION.LAMBDA;
+    SIM.sigma = CONFIG.GENETIC.SIGMA;
+    SIM.genSeconds = CONFIG.SIMULATION.GEN_SECONDS;
+    SIM.stepsPerGen = CONFIG.SIMULATION.STEPS_PER_GEN;
+    SIM.speed = CONFIG.SIMULATION.SPEED;
     SIM.clearStorage();
     SIM.initWorld();
-    ChampionViewer.clearHistory();
+
     ChartManager.clearHistory();
     setUIFromSim();
   }
@@ -967,108 +883,13 @@
     setUIFromSim();
   }
 
-  function handleSaveChampion() {
-    const js = SIM.exportChampion();
-    UI.other.champJson.value = js;
-    UI.other.champInfo.innerText = js.slice(0, 800);
-  }
 
-  function handleLoadChampion() {
-    if (UI.other.champJson.value.trim().length > 10) {
-      const ok = SIM.importChampion(UI.other.champJson.value.trim());
-      if (ok) alert("Champion loaded");
-      else alert("Falha ao carregar");
-    }
-  }
-
-  function handlePopulationChange() {
-    UI.values.pop.innerText = String(parseInt(UI.inputs.pop.value));
-    SIM.lambda = parseInt(UI.inputs.pop.value);
-    UI.values.popTotal.innerText = String(1 + SIM.lambda);
-    UI.labels.popSize.innerText = String(1 + SIM.lambda);
-
-    // Ajusta população atual se já existe
-    if (SIM.population.length > 0) {
-      SIM.adjustPopulationSize(1 + SIM.lambda);
-    }
-  }
-
-  function handleSigmaChange() {
-    UI.values.sigma.innerText = parseFloat(UI.inputs.sigma.value).toFixed(2);
-    SIM.sigma = parseFloat(UI.inputs.sigma.value);
-  }
-
-  function handleGenSecondsChange() {
-    UI.values.genSec.innerText = UI.inputs.genSec.value;
-    SIM.genSeconds = parseInt(UI.inputs.genSec.value);
-    SIM.stepsPerGen = Math.max(
-      CONFIG.SIMULATION.MIN_STEPS_PER_GEN,
-      Math.round(SIM.genSeconds * CONFIG.SIMULATION.STEPS_PER_SECOND)
-    );
-    UI.inputs.steps.value = String(SIM.stepsPerGen);
-    UI.values.steps.innerText = String(SIM.stepsPerGen);
-  }
-
-  function handleStepsChange() {
-    UI.values.steps.innerText = UI.inputs.steps.value;
-    SIM.stepsPerGen = parseInt(UI.inputs.steps.value);
-    const secs = Math.max(
-      1,
-      Math.round(SIM.stepsPerGen / CONFIG.SIMULATION.STEPS_PER_SECOND)
-    );
-    SIM.genSeconds = secs;
-    UI.inputs.genSec.value = String(secs);
-    UI.values.genSec.innerText = String(secs);
-  }
-
-  function handleSpeedChange() {
-    UI.values.speed.innerText = UI.inputs.speed.value;
-    SIM.speed = parseInt(UI.inputs.speed.value);
-  }
-
-  function handleDebugToggle() {
-    SIM.debug = UI.toggles.debug.checked;
-    UI.other.debugBox.style.display = SIM.debug ? "block" : "none";
-  }
-
-  function handleTurboToggle() {
-    const turboToggle = document.getElementById("togTurbo") as HTMLInputElement;
-    SIM.turboMode = turboToggle.checked;
-
-    if (SIM.turboMode) {
-      // Desabilita visualizações pesadas
-      SIM.showSensors = false;
-      SIM.showTrails = false;
-      SIM.showPhero = false;
-
-      // Aumenta velocidade drasticamente
-      SIM.speed = Math.max(SIM.speed, 50);
-
-      // Limpa trails existentes para economizar memória
-      SIM.population.forEach((agent) => (agent.trail = []));
-
-      console.log("Modo Turbo ativado - Performance máxima");
-    } else {
-      // Restaura visualizações
-      SIM.showSensors = UI.toggles.sensors.checked;
-      SIM.showTrails = UI.toggles.trails.checked;
-      SIM.showPhero = UI.toggles.phero.checked;
-
-      console.log("Modo Turbo desativado");
-    }
-  }
 
   function setUIFromSim() {
     DOMManager.updateUI(SIM);
 
-    // Atualiza visualizador se há dados
+    // Atualiza gráfico se há dados
     if (SIM.generation > 0) {
-      ChampionViewer.addChampion(
-        SIM.exportChampion(),
-        SIM.generation,
-        SIM.bestFitness,
-        SIM.bestDelivered
-      );
       ChartManager.addFitnessPoint(
         SIM.generation,
         SIM.bestFitness,
@@ -1083,51 +904,18 @@
       return;
     }
 
+    // Teste visual simples
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+    ctx.fillStyle = "#ff0000";
+    ctx.fillRect(50, 50, 100, 100);
+
     if (SIM.running) {
-      const iterations = SIM.turboMode
-        ? Math.min(
-            SIM.speed * CONFIG.SIMULATION.TURBO_SPEED_MULTIPLIER,
-            CONFIG.SIMULATION.MAX_TURBO_ITERATIONS
-          )
-        : SIM.speed;
-      for (let i = 0; i < iterations; i++) {
-        SIM.stepAll();
-      }
+      for (let i = 0; i < SIM.speed; i++) SIM.stepAll();
     }
-
-    // Renderização condicional
-    if (!SIM.turboMode) {
-      draw(SIM.world, SIM.population, SIM);
-      if (SIM.sanityFailed)
-        Renderer.drawRedText(ctx, "Sanity check failed - reset required");
-    } else {
-      // Modo turbo: apenas limpa canvas e mostra stats essenciais
-      ctx.clearRect(0, 0, cvs.width, cvs.height);
-      ctx.fillStyle = "#58a6ff";
-      ctx.font = "24px monospace";
-      ctx.textAlign = "center";
-      ctx.fillText("MODO TURBO", cvs.width / 2, cvs.height / 2 - 40);
-      ctx.font = "16px monospace";
-      ctx.fillText(
-        `Gen: ${SIM.generation} | Fit: ${SIM.bestFitness} | Del: ${SIM.bestDelivered}`,
-        cvs.width / 2,
-        cvs.height / 2
-      );
-      ctx.fillText(
-        `Pop: ${SIM.population.length} | Speed: ${SIM.speed}x`,
-        cvs.width / 2,
-        cvs.height / 2 + 30
-      );
-    }
-
-    if (SIM.debug && SIM.population[0] && !SIM.turboMode) {
-      const agent = SIM.population[0];
-      UI.other.debugBox.innerText = `champ age:${
-        agent.age
-      } fit:${agent.fitness.toFixed(1)} delivered:${agent.delivered}\npop:${
-        SIM.population.length
-      }`;
-    }
+    draw(SIM.world, SIM.population, SIM);
+    if (SIM.sanityFailed)
+      Renderer.drawRedText(ctx, "Sanity check failed - reset required");
 
     // Atualiza labels sempre
     UI.labels.gen.innerText = SIM.generation;
@@ -1139,7 +927,6 @@
   }
 
   setup();
-  (window as any).exportChampion = () => (SIM ? SIM.exportChampion() : null);
-  (window as any).importChampion = (j) => (SIM ? SIM.importChampion(j) : false);
+
   SIM.sanityCheck();
 })();

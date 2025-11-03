@@ -3,32 +3,12 @@ const RendererImpl = {
     const ctx = sim.ctx;
     ctx.clearRect(0, 0, sim.canvas.width, sim.canvas.height);
 
-    this.drawPheromones(ctx, world, sim);
     this.drawEnvironment(ctx, world);
     this.drawAgents(ctx, population, sim, world);
     this.drawUI(ctx, sim);
   },
 
-  drawPheromones(ctx: CanvasRenderingContext2D, world: World, sim: any): void {
-    if (!sim.showPhero) return;
 
-    const cols = world.pherCols,
-      rows = world.pherRows;
-    const cw = sim.canvas.width / cols,
-      ch = sim.canvas.height / rows;
-
-    ctx.globalCompositeOperation = "lighter";
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) {
-        const v = world.pher[y * cols + x];
-        if (v > 0.001) {
-          ctx.fillStyle = `rgba(20,120,220,${v * 0.18})`;
-          ctx.fillRect(x * cw, y * ch, cw, ch);
-        }
-      }
-    }
-    ctx.globalCompositeOperation = "source-over";
-  },
 
   drawEnvironment(ctx: CanvasRenderingContext2D, world: World): void {
     // Obstáculos
@@ -67,26 +47,10 @@ const RendererImpl = {
     sim: any,
     world: World
   ): void {
-    // Trilhas
-    if (sim.showTrails) {
-      ctx.lineWidth = 1;
-      for (const a of population) {
-        if (a.trail.length > 1) {
-          ctx.beginPath();
-          ctx.moveTo(a.trail[0].x, a.trail[0].y);
-          for (let i = 1; i < a.trail.length; i++) {
-            ctx.lineTo(a.trail[i].x, a.trail[i].y);
-          }
-          ctx.strokeStyle = "rgba(255,255,255,0.03)";
-          ctx.stroke();
-        }
-      }
-    }
+    console.log(`DrawAgents: ${population.length} agentes`);
 
     // Agentes
     for (const a of population) {
-      if (sim.showSensors) this.drawSensors(ctx, a, a.genome, world);
-
       ctx.save();
       ctx.translate(a.x, a.y);
       ctx.rotate(a.a);

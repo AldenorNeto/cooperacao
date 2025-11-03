@@ -56,10 +56,6 @@ interface World {
   base: Base;
   stones: Stone[];
   obstacles: Rect[];
-  pherCols: number;
-  pherRows: number;
-  pher: Float32Array;
-  pherCell(x: number, y: number): number;
 }
 
 interface Genome {
@@ -130,12 +126,7 @@ interface Config {
     COLLISION_PUSH_DISTANCE: number;
     BOUNDARY_MARGIN: number;
   };
-  WORLD: {
-    PHEROMONE_COLS: number;
-    PHEROMONE_ROWS: number;
-    PHEROMONE_DECAY: number;
-    PHEROMONE_STRENGTH: number;
-  };
+
   SIMULATION: {
     MAX_POPULATION: number;
     MIN_POPULATION: number;
@@ -190,7 +181,7 @@ declare const RewardSystem: {
 declare const GeneticSystem: {
   evolvePopulation(population: Agent[], world: World, rng: any, AgentClass: any, GenomeClass: any): {
     population: Agent[];
-    champion: Genome;
+
     bestFitness: number;
     bestDelivered: number;
   };
@@ -221,11 +212,7 @@ declare const DOMManager: {
   setupInputs(sim: any): void;
 };
 
-declare const ChampionViewer: {
-  addChampion(championData: string, generation: number, fitness: number, delivered: number): void;
-  clearHistory(): void;
-  loadFromStorage(): void;
-};
+
 
 declare const ChartManager: {
   init(): void;
@@ -239,7 +226,6 @@ declare const CONFIG: Config;
 declare global {
   interface Window {
     SIM: any;
-    exportChampion(): string | null;
-    importChampion(json: string): boolean;
+
   }
 }

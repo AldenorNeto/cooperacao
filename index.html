@@ -14,10 +14,6 @@
         <h3>Miner Evolution</h3>
         <div class="row">
           <button id="btnStart">Start</button>
-          <button id="btnStop" class="ghost">Stop</button>
-        </div>
-        <div class="row">
-          <button id="btnNext" class="ghost">Next Gen</button>
           <button id="btnReset" class="ghost">Reset</button>
         </div>
         <div class="stat">
@@ -29,89 +25,21 @@
           <div class="small">Population: <span id="popSizeLbl">0</span></div>
         </div>
 
-        <label>λ (children) → population = 1 + λ (min 50, max 300)</label>
-        <input id="inpPop" type="range" min="49" max="299" value="49" />
-        <div class="small">
-          λ = <span id="valPop">49</span> (population =
-          <span id="valPopTotal">50</span>)
-        </div>
-
-        <label>σ (sigma)</label>
-        <input
-          id="inpSigma"
-          type="range"
-          min="0"
-          max="0.6"
-          step="0.01"
-          value="0.12"
-        />
-        <div class="small">sigma = <span id="valSigma">0.12</span></div>
-
-        <label>Gen time (seconds)</label>
-        <input
-          id="inpGenSec"
-          type="range"
-          min="5"
-          max="600"
-          step="5"
-          value="20"
-        />
-        <div class="small">
-          generation time = <span id="valGenSec">20</span> s
-        </div>
-
-        <label>stepsPerGen (for fine control)</label>
-        <input
-          id="inpSteps"
-          type="range"
-          min="100"
-          max="12000"
-          step="50"
-          value="1200"
-        />
-        <div class="small">steps = <span id="valSteps">1200</span></div>
-
-        <label>speed (sim iterations/frame)</label>
-        <input id="inpSpeed" type="range" min="1" max="12" value="2" />
-        <div class="small">speed = <span id="valSpeed">2</span></div>
-
-        <div class="toggle">
-          <input id="togSensors" type="checkbox" checked /><label
-            for="togSensors"
-            class="small"
-            >showSensors</label
-          >
-          <input
-            id="togTrails"
-            type="checkbox"
-            checked
-            style="margin-left: 8px"
-          /><label class="small">showTrails</label>
+        <div class="config-display">
+          <div class="small">Population: <span id="configPop">100</span></div>
+          <div class="small">Sigma: <span id="configSigma">0.15</span></div>
+          <div class="small">Gen Time: <span id="configGenTime">30</span>s</div>
+          <div class="small">Speed: <span id="configSpeed">5</span></div>
         </div>
         <div style="height: 8px"></div>
-        <div class="small">Histórico de Campeões:</div>
-        <div id="championHistory" class="champion-history"></div>
-        
+
         <div class="chart-section">
           <div class="small">Evolução do Fitness:</div>
           <canvas id="fitnessChart"></canvas>
         </div>
 
         <div style="height: 8px"></div>
-        <div class="toggle">
-          <input id="togPhero" type="checkbox" checked /><label class="small"
-            >showPheromone</label
-          >
-          <input id="togDebug" type="checkbox" style="margin-left: 8px" /><label
-            class="small"
-            >debug overlay</label
-          >
-        </div>
-        <div class="toggle" style="margin-top: 8px;">
-          <input id="togTurbo" type="checkbox" /><label class="small" style="color: #ff6b6b; font-weight: bold;"
-            >MODO TURBO</label
-          >
-        </div>
+
         <div style="height: 8px"></div>
         <div id="debugBox" class="monos"></div>
       </div>
@@ -120,7 +48,7 @@
     <script src="js/sensorSystem.js"></script>
     <script src="js/rewardSystem.js"></script>
     <script src="js/geneticSystem.js"></script>
-    <script src="js/championViewer.js"></script>
+
     <script src="js/mapGenerator.js"></script>
     <script src="js/domManager.js"></script>
     <script src="js/chartManager.js"></script>

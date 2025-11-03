@@ -65,9 +65,7 @@ button.ghost {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-input[type="range"] {
-  width: 100%;
-}
+
 
 label {
   font-size: 12px;
@@ -140,130 +138,7 @@ textarea {
   max-height: 140px;
 }
 
-/* Champion Viewer Styles */
-.champion-history {
-  max-height: 300px;
-  overflow-y: auto;
-  font-size: 11px;
-}
 
-.champion-card {
-  background: #021024;
-  border-radius: 6px;
-  padding: 8px;
-  margin-bottom: 8px;
-  border-left: 3px solid #1f6feb;
-}
-
-.champion-card.current {
-  border-left-color: #2ea043;
-  background: #0a1f0a;
-}
-
-.champion-card.previous {
-  border-left-color: #656d76;
-  background: #0a0a0f;
-}
-
-.champion-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.champion-header h4 {
-  margin: 0;
-  font-size: 12px;
-  color: #cfe7ff;
-}
-
-.champion-stats {
-  display: flex;
-  gap: 8px;
-  font-size: 10px;
-}
-
-.champion-stats .fitness {
-  color: #79c0ff;
-}
-
-.champion-stats .delivered {
-  color: #56d364;
-}
-
-.genome-section {
-  margin-bottom: 6px;
-  padding: 4px;
-  border-radius: 4px;
-}
-
-.genome-section.has-changes {
-  background: rgba(255, 212, 59, 0.1);
-  border: 1px solid rgba(255, 212, 59, 0.3);
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 3px;
-}
-
-.section-name {
-  font-weight: 600;
-  color: #cfe7ff;
-  font-size: 10px;
-}
-
-.change-count {
-  background: #ffd33d;
-  color: #0a0a0a;
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-size: 9px;
-  font-weight: 600;
-}
-
-.section-values {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-}
-
-.value {
-  background: #21262d;
-  padding: 1px 3px;
-  border-radius: 2px;
-  font-size: 9px;
-  color: #8b949e;
-}
-
-.value.changed {
-  background: #ffd33d;
-  color: #0a0a0a;
-  font-weight: 600;
-}
-
-.champion-changes {
-  margin-top: 6px;
-  padding: 4px;
-  background: rgba(255, 212, 59, 0.1);
-  border-radius: 4px;
-  font-size: 10px;
-}
-
-.change-summary {
-  color: #8b949e;
-  margin-top: 2px;
-}
-
-.champion-empty {
-  text-align: center;
-  color: #656d76;
-  padding: 20px;
-  font-style: italic;
-}
 
 /* Chart Styles */
 .chart-section {
@@ -278,4 +153,14 @@ textarea {
   height: 150px;
   border-radius: 4px;
   margin-top: 6px;
+}
+.config-display {
+  background: #07182a;
+  padding: 6px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
 }

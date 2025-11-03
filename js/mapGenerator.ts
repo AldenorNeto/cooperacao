@@ -11,11 +11,10 @@ const MapGeneratorImpl = {
   },
 
   /**
-   * Gera obstáculos com distância mínima da base
+   * Gera obstáculos apenas evitando sobreposição com base
    */
   generateObstacles(w: number, h: number, base: Base, rng: any): Rect[] {
     const oCount = 6 + rng.int(7);
-    const minDistFromBase = Math.min(w, h) * 0.4; // 40% da menor dimensão
     const obstacles = [];
 
     for (let i = 0; i < oCount; i++) {
@@ -30,9 +29,7 @@ const MapGeneratorImpl = {
         oy = rng.float(0, h - oh);
         tries++;
       } while (
-        (this._distanceToBase(ox + ow / 2, oy + oh / 2, base) <
-          minDistFromBase ||
-          this._rectCircleOverlap({ x: ox, y: oy, w: ow, h: oh }, base) ||
+        (this._rectCircleOverlap({ x: ox, y: oy, w: ow, h: oh }, base) ||
           obstacles.some((o) =>
             this._rectOverlap(o, { x: ox, y: oy, w: ow, h: oh })
           )) &&

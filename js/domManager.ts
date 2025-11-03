@@ -10,26 +10,15 @@ const DOMManagerImpl = {
       canvas: document.getElementById("c"),
       buttons: {
         start: document.getElementById("btnStart"),
-        stop: document.getElementById("btnStop"),
-        next: document.getElementById("btnNext"),
         reset: document.getElementById("btnReset"),
         save: document.getElementById("btnSave"),
         load: document.getElementById("btnLoad"),
       },
-      inputs: {
-        pop: document.getElementById("inpPop"),
-        sigma: document.getElementById("inpSigma"),
-        genSec: document.getElementById("inpGenSec"),
-        steps: document.getElementById("inpSteps"),
-        speed: document.getElementById("inpSpeed"),
-      },
-      values: {
-        pop: document.getElementById("valPop"),
-        popTotal: document.getElementById("valPopTotal"),
-        sigma: document.getElementById("valSigma"),
-        genSec: document.getElementById("valGenSec"),
-        steps: document.getElementById("valSteps"),
-        speed: document.getElementById("valSpeed"),
+      configDisplay: {
+        pop: document.getElementById("configPop"),
+        sigma: document.getElementById("configSigma"),
+        genTime: document.getElementById("configGenTime"),
+        speed: document.getElementById("configSpeed"),
       },
       labels: {
         gen: document.getElementById("gen"),
@@ -37,12 +26,7 @@ const DOMManagerImpl = {
         bestdel: document.getElementById("bestdel"),
         popSize: document.getElementById("popSizeLbl"),
       },
-      toggles: {
-        sensors: document.getElementById("togSensors"),
-        trails: document.getElementById("togTrails"),
-        phero: document.getElementById("togPhero"),
-        debug: document.getElementById("togDebug"),
-      },
+
       other: {
         champJson: document.getElementById("champJson"),
         champInfo: document.getElementById("champInfo"),
@@ -72,32 +56,20 @@ const DOMManagerImpl = {
   updateUI(sim: any): void {
     const e = this.elements;
 
-    e.values.pop.innerText = String(sim.lambda);
-    e.values.popTotal.innerText = String(1 + sim.lambda);
-    e.labels.popSize.innerText = String(1 + sim.lambda);
-    e.values.sigma.innerText = sim.sigma.toFixed(2);
-    e.values.genSec.innerText = sim.genSeconds;
-    e.values.steps.innerText = sim.stepsPerGen;
-    e.values.speed.innerText = sim.speed;
+    e.configDisplay.pop.innerText = String(1 + sim.lambda);
+    e.configDisplay.sigma.innerText = sim.sigma.toFixed(2);
+    e.configDisplay.genTime.innerText = sim.genSeconds;
+    e.configDisplay.speed.innerText = sim.speed;
     e.labels.gen.innerText = sim.generation;
     e.labels.best.innerText = sim.bestFitness;
     e.labels.bestdel.innerText = sim.bestDelivered;
+    e.labels.popSize.innerText = String(1 + sim.lambda);
   },
 
   /**
    * Configura inputs iniciais
    */
-  setupInputs(sim: any): void {
-    const e = this.elements;
 
-    e.inputs.pop.min = "49";
-    e.inputs.pop.max = "299";
-    e.inputs.pop.value = String(sim.lambda);
-    e.inputs.sigma.value = String(sim.sigma);
-    e.inputs.genSec.value = String(sim.genSeconds);
-    e.inputs.steps.value = String(sim.stepsPerGen);
-    e.inputs.speed.value = String(sim.speed);
-  },
 
   /**
    * Desenha texto de erro
@@ -133,26 +105,7 @@ const DOMManagerImpl = {
   /**
    * Desenha feromônios
    */
-  drawPheromones(ctx: CanvasRenderingContext2D, world: World, sim: any): void {
-    if (!sim.showPhero) return;
 
-    const cols = world.pherCols,
-      rows = world.pherRows;
-    const cw = sim.canvas.width / cols,
-      ch = sim.canvas.height / rows;
-
-    ctx.globalCompositeOperation = "lighter";
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) {
-        const v = world.pher[y * cols + x];
-        if (v > 0.001) {
-          ctx.fillStyle = `rgba(20,120,220,${v * 0.18})`;
-          ctx.fillRect(x * cw, y * ch, cw, ch);
-        }
-      }
-    }
-    ctx.globalCompositeOperation = "source-over";
-  },
 
   /**
    * Desenha ambiente (obstáculos, pedras, base)
@@ -191,7 +144,12 @@ const DOMManagerImpl = {
   /**
    * Desenha agentes
    */
-  drawAgents(ctx: CanvasRenderingContext2D, pop: Agent[], sim: any, world: World): void {
+  drawAgents(
+    ctx: CanvasRenderingContext2D,
+    pop: Agent[],
+    sim: any,
+    world: World
+  ): void {
     // Rastros
     if (sim.showTrails) {
       ctx.lineWidth = 1;
@@ -247,7 +205,12 @@ const DOMManagerImpl = {
   /**
    * Desenha sensores
    */
-  drawSensors(ctx: CanvasRenderingContext2D, agent: Agent, genome: Genome, world: World): void {
+  drawSensors(
+    ctx: CanvasRenderingContext2D,
+    agent: Agent,
+    genome: Genome,
+    world: World
+  ): void {
     // Implementação dos sensores (copiada do código original)
     // ... (código dos sensores permanece igual)
   },
