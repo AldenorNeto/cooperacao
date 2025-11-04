@@ -168,40 +168,42 @@ declare const GeometryUtils: {
   distance(x1: number, y1: number, x2: number, y2: number): number;
   pointInRect(x: number, y: number, rect: Rect): boolean;
   rectCircleOverlap(rect: Rect, circle: Circle): boolean;
-  rayCircleIntersectT(rx: number, ry: number, dx: number, dy: number, cx: number, cy: number, cr: number): number | null;
+  rayCircleIntersectT(
+    rx: number,
+    ry: number,
+    dx: number,
+    dy: number,
+    cx: number,
+    cy: number,
+    cr: number
+  ): number | null;
 };
 
 declare const SensorSystem: {
   calculateSensorData(agent: Agent, genome: Genome, world: World): SensorData[];
   extractInputs(sensorData: SensorData[], agent: Agent, world: World): number[];
-  drawSensors(ctx: CanvasRenderingContext2D, agent: Agent, sensorData: SensorData[]): void;
+  drawSensors(
+    ctx: CanvasRenderingContext2D,
+    agent: Agent,
+    sensorData: SensorData[]
+  ): void;
 };
 
-declare const RewardSystem: {
-  calculateTotalFitness(agent: Agent, actionInfo: ActionResult, world: World): number;
-  calculateCollisionPenalty(collisionType: 'boundary' | 'obstacle'): number;
-  evaluatePopulation(agents: Agent[], world: World): Agent[];
-};
+declare const RewardSystem: RewardSystemInterface;
 
-declare const GeneticSystem: {
-  evolvePopulation(population: Agent[], world: World, rng: any, AgentClass: any, GenomeClass: any): {
-    population: Agent[];
-    bestFitness: number;
-    bestDelivered: number;
-  };
-  getStats(): {
-    stagnationCount: number;
-    adaptiveSigma: string;
-    diversity: string;
-    isStagnant: boolean;
-  };
-  state: any;
-};
+declare const GeneticSystem: GeneticSystemInterface;
 
 declare const MapGenerator: {
   generateBase(w: number, h: number, rng: any): Base;
   generateObstacles(w: number, h: number, base: Base, rng: any): Rect[];
-  generateStones(w: number, h: number, base: Base, obstacles: Rect[], minTotalQuantity: number, rng: any): Stone[];
+  generateStones(
+    w: number,
+    h: number,
+    base: Base,
+    obstacles: Rect[],
+    minTotalQuantity: number,
+    rng: any
+  ): Stone[];
 };
 
 declare const Renderer: {
@@ -216,13 +218,90 @@ declare const DOMManager: {
   setupInputs(sim: any): void;
 };
 
-
-
 declare const ChartManager: {
   init(): void;
   addFitnessPoint(generation: number, fitness: number, delivered: number): void;
   clearHistory(): void;
 };
+
+// Interfaces abstratas para sistemas
+interface RNG {
+  int(max: number): number;
+  rand(): number;
+  float(min: number, max: number): number;
+  gaussian(mean: number, std: number): number;
+}
+
+interface AgentConstructor {
+  new (x: number, y: number, angle: number, genome: Genome): Agent;
+}
+
+interface GenomeConstructor {
+  new (rng: RNG): Genome;
+}
+
+interface PopulationStats {
+  avgWrongMines: number;
+  avgExperience: number;
+}
+
+interface MultiObjectiveMetrics {
+  deliveries: number;
+  efficiency: number;
+  exploration: number;
+  survival: number;
+  rawFitness?: number;
+}
+
+interface EvolutionResult {
+  population: Agent[];
+  champion: Genome;
+  bestFitness: number;
+  bestDelivered: number;
+}
+
+interface GeneticSystemState {
+  stagnationCount: number;
+  lastBestFitness: number;
+  diversityHistory: number[];
+  adaptiveSigma: number;
+}
+
+interface RewardSystemInterface {
+  updatePopulationStats(agents: Agent[]): void;
+  calculateAdaptivePenalty(agent: Agent, penaltyType: string): number;
+  calculateActionRewards(
+    agent: Agent,
+    actionInfo: ActionResult,
+    world: World
+  ): number;
+  calculateReturnToBaseBonus(agent: Agent, world: World): number;
+  calculateProximityBonus(agent: Agent, world: World): number;
+  calculateCollisionPenalty(collisionType: "boundary" | "obstacle"): number;
+  calculateTotalFitness(
+    agent: Agent,
+    actionInfo: ActionResult,
+    world: World
+  ): number;
+  evaluatePopulation(agents: Agent[], world: World): Agent[];
+}
+
+interface GeneticSystemInterface {
+  evolvePopulation(
+    population: Agent[],
+    world: World,
+    rng: RNG,
+    AgentClass: AgentConstructor,
+    GenomeClass: GenomeConstructor
+  ): EvolutionResult;
+  getStats(): {
+    stagnationCount: number;
+    adaptiveSigma: string;
+    diversity: string;
+    isStagnant: boolean;
+  };
+  state: GeneticSystemState;
+}
 
 declare const CONFIG: Config;
 
@@ -230,6 +309,5 @@ declare const CONFIG: Config;
 declare global {
   interface Window {
     SIM: any;
-
   }
 }

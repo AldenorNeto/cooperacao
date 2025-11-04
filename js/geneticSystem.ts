@@ -18,7 +18,7 @@ const GeneticSystemImpl = {
   state: {
     stagnationCount: 0,
     lastBestFitness: 0,
-    diversityHistory: [],
+    diversityHistory: [] as number[],
     adaptiveSigma: 0.12,
   },
 
@@ -28,12 +28,12 @@ const GeneticSystemImpl = {
   evolvePopulation(
     currentPopulation: Agent[],
     world: World,
-    rng: any,
-    AgentClass: any,
-    GenomeClass: any
-  ) {
+    rng: RNG,
+    AgentClass: AgentConstructor,
+    GenomeClass: GenomeConstructor
+  ): EvolutionResult {
     const rankedAgents = this._rankAndEvaluate(currentPopulation, world);
-    const newPopulation = [];
+    const newPopulation: Agent[] = [];
     const popSize = currentPopulation.length;
 
     // Calcula tamanhos dos grupos - sempre preserva top 5
@@ -120,7 +120,7 @@ const GeneticSystemImpl = {
   /**
    * Seleciona pai usando torneio
    */
-  _selectParent(parentPool: Agent[], rng: any): Agent {
+  _selectParent(parentPool: Agent[], rng: RNG): Agent {
     const tournamentSize = Math.min(3, parentPool.length);
     let best = parentPool[rng.int(parentPool.length)];
 
@@ -141,9 +141,9 @@ const GeneticSystemImpl = {
     parent1: Agent,
     parent2: Agent,
     world: World,
-    rng: any,
-    AgentClass: any,
-    GenomeClass: any
+    rng: RNG,
+    AgentClass: AgentConstructor,
+    GenomeClass: GenomeConstructor
   ): Agent {
     if (rng.rand() > this.CONFIG.CROSSOVER_RATE) {
       // Clona o melhor pai
@@ -205,7 +205,12 @@ const GeneticSystemImpl = {
   /**
    * Mutação de um agente
    */
-  _mutateAgent(parent: Agent, world: World, rng: any, AgentClass: any): Agent {
+  _mutateAgent(
+    parent: Agent,
+    world: World,
+    rng: RNG,
+    AgentClass: AgentConstructor
+  ): Agent {
     const mutatedGenome = parent.genome.mutate(rng, this.state.adaptiveSigma);
     return this._createAgentFromGenome(mutatedGenome, world, rng, AgentClass);
   },
@@ -213,7 +218,12 @@ const GeneticSystemImpl = {
   /**
    * Clona um agente
    */
-  _cloneAgent(parent: Agent, world: World, rng: any, AgentClass: any): Agent {
+  _cloneAgent(
+    parent: Agent,
+    world: World,
+    rng: RNG,
+    AgentClass: AgentConstructor
+  ): Agent {
     const clonedGenome = parent.genome.clone();
     return this._createAgentFromGenome(clonedGenome, world, rng, AgentClass);
   },
@@ -223,9 +233,9 @@ const GeneticSystemImpl = {
    */
   _createRandomAgent(
     world: World,
-    rng: any,
-    AgentClass: any,
-    GenomeClass: any
+    rng: RNG,
+    AgentClass: AgentConstructor,
+    GenomeClass: GenomeConstructor
   ): Agent {
     const randomGenome = new GenomeClass(rng);
     return this._createAgentFromGenome(randomGenome, world, rng, AgentClass);
@@ -237,8 +247,8 @@ const GeneticSystemImpl = {
   _createAgentFromGenome(
     genome: Genome,
     world: World,
-    rng: any,
-    AgentClass: any
+    rng: RNG,
+    AgentClass: AgentConstructor
   ): Agent {
     return new AgentClass(
       world.base.x + world.base.r + 6 + rng.float(-6, 6),
@@ -332,7 +342,12 @@ const GeneticSystemImpl = {
   /**
    * Obtém estatísticas do sistema genético
    */
-  getStats() {
+  getStats(): {
+    stagnationCount: number;
+    adaptiveSigma: string;
+    diversity: string;
+    isStagnant: boolean;
+  } {
     const avgDiversity =
       this.state.diversityHistory.length > 0
         ? this.state.diversityHistory.reduce((a, b) => a + b) /

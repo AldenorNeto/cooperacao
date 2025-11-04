@@ -284,7 +284,7 @@ const RewardSystemImpl = {
   /**
    * Calcula métricas multi-objetivo
    */
-  _calculateMultiObjectiveMetrics(agents: Agent[], world: World) {
+  _calculateMultiObjectiveMetrics(agents: Agent[], world: World): MultiObjectiveMetrics[] {
     return agents.map(agent => ({
       deliveries: agent.deliveries,
       efficiency: (agent.correctMineAttempts || 0) / Math.max(1, (agent.wrongMineAttempts || 0) + (agent.correctMineAttempts || 0)),
@@ -297,17 +297,17 @@ const RewardSystemImpl = {
   /**
    * Normalização relativa (z-score)
    */
-  _normalizeMetrics(metrics) {
-    const keys = ['deliveries', 'efficiency', 'exploration', 'survival'];
-    const normalized = metrics.map(() => ({}));
+  _normalizeMetrics(metrics: MultiObjectiveMetrics[]): MultiObjectiveMetrics[] {
+    const keys: (keyof MultiObjectiveMetrics)[] = ['deliveries', 'efficiency', 'exploration', 'survival'];
+    const normalized: MultiObjectiveMetrics[] = metrics.map(() => ({} as MultiObjectiveMetrics));
     
     keys.forEach(key => {
-      const values = metrics.map(m => m[key]);
+      const values = metrics.map(m => m[key] as number);
       const mean = values.reduce((a, b) => a + b, 0) / values.length;
       const std = Math.sqrt(values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length) || 1;
       
       values.forEach((val, i) => {
-        normalized[i][key] = (val - mean) / std; // z-score
+        (normalized[i][key] as number) = (val - mean) / std; // z-score
       });
     });
     
