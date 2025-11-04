@@ -69,15 +69,22 @@ const MapGeneratorImpl = {
       const y = row * cellH + cellH/2 + rng.float(-cellH*0.3, cellH*0.3);
       
       // Skip if too close to base or overlaps obstacles
-      if (this._distance(x, y, base.x, base.y) >= 80 && 
+      const minDistFromBase = Math.max(240, base.r * 16); // Mínimo 120px ou 8x raio da base
+      if (this._distance(x, y, base.x, base.y) >= minDistFromBase && 
           !obstacles.some((o) => this._rectCircleOverlap(o, { x, y, r }))) {
         const quantity = 1 + rng.int(80);
-        stones.push({ x: this._clamp(x, 40, w-40), y: this._clamp(y, 40, h-40), r, quantity });
+        const clampedX = this._clamp(x, 40, w-40);
+        const clampedY = this._clamp(y, 40, h-40);
+        
+        // Verifica distância após clamp
+        if (this._distance(clampedX, clampedY, base.x, base.y) >= minDistFromBase) {
+          stones.push({ x: clampedX, y: clampedY, r, quantity });
+        }
       }
     }
 
     // Ajusta quantidades para garantir mínimo
-    this._adjustStoneQuantities(stones, minTotalQuantity, w, h, rng);
+    this._adjustStoneQuantities(stones, minTotalQuantity, w, h, base, rng);
 
     return stones;
   },
@@ -90,6 +97,7 @@ const MapGeneratorImpl = {
     minTotalQuantity: number,
     w: number,
     h: number,
+    base: Base,
     rng: any
   ): void {
     let total = stones.reduce((s, stone) => s + stone.quantity, 0);
@@ -101,12 +109,25 @@ const MapGeneratorImpl = {
       idx++;
     }
 
-    // Adiciona variação de posição
+    // Adiciona variação de posição (com verificação de distância)
+    const minDistFromBase = Math.max(120, base.r * 8);
     for (const s of stones) {
-      s.x += rng.float(-8, 8);
-      s.y += rng.float(-8, 8);
-      s.x = this._clamp(s.x, 30, w - 30);
-      s.y = this._clamp(s.y, 30, h - 30);
+      let attempts = 0;
+      let newX, newY;
+      
+      do {
+        newX = s.x + rng.float(-8, 8);
+        newY = s.y + rng.float(-8, 8);
+        newX = this._clamp(newX, 30, w - 30);
+        newY = this._clamp(newY, 30, h - 30);
+        attempts++;
+      } while (this._distance(newX, newY, base.x, base.y) < minDistFromBase && attempts < 10);
+      
+      // Só aplica se encontrou posição válida
+      if (this._distance(newX, newY, base.x, base.y) >= minDistFromBase) {
+        s.x = newX;
+        s.y = newY;
+      }
     }
   },
 
@@ -114,6 +135,14 @@ const MapGeneratorImpl = {
   _distance: GeometryUtils.distance,
   _distanceToBase(x: number, y: number, base: Base): number {
     return this._distance(x, y, base.x, base.y);
+  },
+
+  /**
+   * Cria zonas de exclusão ao redor da base
+   */
+  _isInExclusionZone(x: number, y: number, base: Base): boolean {
+    const minDist = Math.max(120, base.r * 8);
+    return this._distance(x, y, base.x, base.y) < minDist;
   },
   _clamp: GeometryUtils.clamp,
   _rectOverlap(a: Rect, b: Rect): boolean {

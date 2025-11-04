@@ -21,7 +21,6 @@ const DOMManagerImpl = {
         speed: document.getElementById("configSpeed"),
       },
       labels: {
-        gen: document.getElementById("gen"),
         best: document.getElementById("best"),
         bestdel: document.getElementById("bestdel"),
         popSize: document.getElementById("popSizeLbl"),
@@ -60,10 +59,6 @@ const DOMManagerImpl = {
     e.configDisplay.sigma.innerText = sim.sigma.toFixed(2);
     e.configDisplay.genTime.innerText = sim.genSeconds;
     e.configDisplay.speed.innerText = sim.speed;
-    e.labels.gen.innerText = sim.generation;
-    e.labels.best.innerText = sim.bestFitness;
-    e.labels.bestdel.innerText = sim.bestDelivered;
-    e.labels.popSize.innerText = String(1 + sim.lambda);
   },
 
   /**

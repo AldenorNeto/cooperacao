@@ -1,4 +1,7 @@
 const RewardSystemImpl = {
+  // Cache para médias da população
+  _populationStats: { avgWrongMines: 0, avgExperience: 0 },
+
   // Configurações de recompensas
   REWARDS: {
     // Sucessos principais
@@ -9,9 +12,10 @@ const RewardSystemImpl = {
     CORRECT_MINE_ATTEMPT: 2,
     CORRECT_DEPOSIT_ATTEMPT: 1,
 
-    // Penalidades por ações incorretas
-    WRONG_MINE_ATTEMPT: -8,
-    WRONG_DEPOSIT_ATTEMPT: -5,
+    // Penalidades graduais adaptativas
+    WRONG_MINE_BASE_PENALTY: -2,
+    WRONG_MINE_EXPERIENCE_MULTIPLIER: 1.8,
+    WRONG_DEPOSIT_BASE_PENALTY: -1,
 
     // Custos de imobilidade
     IMMOBILE_COST: -0.5,
@@ -23,11 +27,53 @@ const RewardSystemImpl = {
     // Bonus base
     ALIVE_BONUS: 0.01,
 
+    // Bonus de retorno à base
+    RETURN_TO_BASE_BONUS: 15,
+    BASE_PROXIMITY_THRESHOLD: 60,
+
     // Bonus de proximidade
     PROXIMITY_MULTIPLIER: {
       CARRYING_TO_BASE: 2.5,
       SEEKING_STONES: 0.8,
     },
+  },
+
+  /**
+   * Atualiza estatísticas da população
+   */
+  updatePopulationStats(agents: Agent[]): void {
+    const totalWrongMines = agents.reduce((sum, a) => sum + (a.wrongMineAttempts || 0), 0);
+    const totalExperience = agents.reduce((sum, a) => sum + a.deliveries + (a.hasMinedBefore ? 1 : 0), 0);
+    
+    this._populationStats.avgWrongMines = totalWrongMines / agents.length;
+    this._populationStats.avgExperience = totalExperience / agents.length;
+  },
+
+  /**
+   * Calcula penalidade gradual + relativa à população
+   */
+  calculateAdaptivePenalty(agent: Agent, penaltyType: string): number {
+    const experience = agent.deliveries + (agent.hasMinedBefore ? 1 : 0);
+    
+    switch (penaltyType) {
+      case 'WRONG_MINE':
+        // Penalidade gradual baseada na experiência
+        const basePenalty = this.REWARDS.WRONG_MINE_BASE_PENALTY;
+        const experienceMultiplier = Math.pow(this.REWARDS.WRONG_MINE_EXPERIENCE_MULTIPLIER, experience);
+        
+        // Penalidade relativa à população
+        const agentWrongMines = agent.wrongMineAttempts || 0;
+        const relativeFactor = agentWrongMines > this._populationStats.avgWrongMines ? 
+          1 + (agentWrongMines - this._populationStats.avgWrongMines) * 0.5 : 0.5;
+        
+        return basePenalty * experienceMultiplier * relativeFactor;
+      
+      case 'WRONG_DEPOSIT':
+        return this.REWARDS.WRONG_DEPOSIT_BASE_PENALTY * (1 + experience * 0.5);
+      
+      default:
+        return 0;
+    }
   },
 
   /**
@@ -55,7 +101,8 @@ const RewardSystemImpl = {
       if (nearStone && !agent.carry) {
         reward += this.REWARDS.CORRECT_MINE_ATTEMPT;
       } else {
-        reward += this.REWARDS.WRONG_MINE_ATTEMPT;
+        // Penalidade gradual - pioneiros são protegidos
+        reward += this.calculateAdaptivePenalty(agent, 'WRONG_MINE');
       }
     }
 
@@ -65,7 +112,7 @@ const RewardSystemImpl = {
       if (nearBase && agent.carry) {
         reward += this.REWARDS.CORRECT_DEPOSIT_ATTEMPT;
       } else {
-        reward += this.REWARDS.WRONG_DEPOSIT_ATTEMPT;
+        reward += this.calculateAdaptivePenalty(agent, 'WRONG_DEPOSIT');
       }
     }
 
@@ -79,6 +126,24 @@ const RewardSystemImpl = {
     if (agent.state === "MINING" || agent.state === "DEPOSIT") {
       return this.REWARDS.IMMOBILE_COST;
     }
+    return 0;
+  },
+
+  /**
+   * Calcula bonus de retorno à base
+   */
+  calculateReturnToBaseBonus(agent: Agent, world: World): number {
+    // Só dá bonus se: carregando pedra + já saiu da base
+    if (!agent.carry || !agent.hasLeftBase) return 0;
+    
+    const distToBase = this._distanceToBase(agent, world);
+    
+    // Bonus progressivo conforme se aproxima da base
+    if (distToBase <= this.REWARDS.BASE_PROXIMITY_THRESHOLD) {
+      const proximityFactor = 1 - (distToBase / this.REWARDS.BASE_PROXIMITY_THRESHOLD);
+      return proximityFactor * this.REWARDS.RETURN_TO_BASE_BONUS;
+    }
+    
     return 0;
   },
 
@@ -183,6 +248,9 @@ const RewardSystemImpl = {
     // Bonus de proximidade
     points += this.calculateProximityBonus(agent, world);
 
+    // Bonus de retorno à base
+    points += this.calculateReturnToBaseBonus(agent, world);
+
     // Bonus base por estar vivo
     points += this.REWARDS.ALIVE_BONUS;
 
@@ -190,83 +258,82 @@ const RewardSystemImpl = {
   },
 
   /**
-   * Sistema de ranking granular preservando fitness real
+   * Sistema multi-objetivo com normalização relativa
    */
   evaluatePopulation(agents: Agent[], world: World): Agent[] {
-    // Calcula score detalhado para cada agente
-    agents.forEach((agent) => {
-      agent.detailedScore = this._calculateDetailedScore(agent, world);
+    // 0. Atualiza estatísticas da população para penalidades relativas
+    this.updatePopulationStats(agents);
+    
+    // 1. Calcula métricas multi-objetivo
+    const metrics = this._calculateMultiObjectiveMetrics(agents, world);
+    
+    // 2. Normaliza scores relativamente (z-score)
+    const normalizedMetrics = this._normalizeMetrics(metrics);
+    
+    // 3. Aplica scores normalizados
+    agents.forEach((agent, i) => {
+      agent.detailedScore = normalizedMetrics[i];
     });
-
-    // Ordena por critérios granulares mas preserva fitness real
-    agents.sort((a, b) => this._compareAgents(a, b));
+    
+    // 4. Ranking Pareto + score agregado
+    agents.sort((a, b) => this._compareMultiObjective(a, b));
 
     return agents;
   },
 
   /**
-   * Calcula score detalhado para ranking granular
+   * Calcula métricas multi-objetivo
    */
-  _calculateDetailedScore(agent: Agent, world: World) {
-    const score = {
+  _calculateMultiObjectiveMetrics(agents: Agent[], world: World) {
+    return agents.map(agent => ({
       deliveries: agent.deliveries,
-      hasMinedBefore: agent.hasMinedBefore ? 1 : 0,
-      carry: agent.carry ? 1 : 0,
-      distanceToTarget: this._getTargetDistance(agent, world),
-      correctAttempts: agent.correctMineAttempts || 0,
-      wrongAttempts: agent.wrongMineAttempts || 0,
-      collisions: agent.collisions,
-      age: agent.age,
-    };
-    return score;
+      efficiency: (agent.correctMineAttempts || 0) / Math.max(1, (agent.wrongMineAttempts || 0) + (agent.correctMineAttempts || 0)),
+      exploration: agent.hasLeftBase ? 1 : 0,
+      survival: Math.min(agent.age / 1000, 1),
+      rawFitness: agent.fitness
+    }));
   },
 
   /**
-   * Compara dois agentes para ranking granular
+   * Normalização relativa (z-score)
    */
-  _compareAgents(a: Agent, b: Agent): number {
+  _normalizeMetrics(metrics) {
+    const keys = ['deliveries', 'efficiency', 'exploration', 'survival'];
+    const normalized = metrics.map(() => ({}));
+    
+    keys.forEach(key => {
+      const values = metrics.map(m => m[key]);
+      const mean = values.reduce((a, b) => a + b, 0) / values.length;
+      const std = Math.sqrt(values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length) || 1;
+      
+      values.forEach((val, i) => {
+        normalized[i][key] = (val - mean) / std; // z-score
+      });
+    });
+    
+    return normalized;
+  },
+
+  /**
+   * Comparação multi-objetivo (Pareto + agregado)
+   */
+  _compareMultiObjective(a: Agent, b: Agent): number {
     const scoreA = a.detailedScore;
     const scoreB = b.detailedScore;
-
-    // 1. Entregas (prioridade máxima)
-    if (scoreA.deliveries !== scoreB.deliveries) {
-      return scoreB.deliveries - scoreA.deliveries;
+    
+    // 1. Prioridade: deliveries (absoluto)
+    if (a.deliveries !== b.deliveries) {
+      return b.deliveries - a.deliveries;
     }
-
-    // 2. Está carregando pedra
-    if (scoreA.carry !== scoreB.carry) {
-      return scoreB.carry - scoreA.carry;
-    }
-
-    // 3. Já minerou antes
-    if (scoreA.hasMinedBefore !== scoreB.hasMinedBefore) {
-      return scoreB.hasMinedBefore - scoreA.hasMinedBefore;
-    }
-
-    // 4. Distância ao objetivo (menor é melhor)
-    if (Math.abs(scoreA.distanceToTarget - scoreB.distanceToTarget) > 5) {
-      return scoreA.distanceToTarget - scoreB.distanceToTarget;
-    }
-
-    // 5. Tentativas corretas vs incorretas
-    const ratioA =
-      scoreA.correctAttempts /
-      Math.max(1, scoreA.wrongAttempts + scoreA.correctAttempts);
-    const ratioB =
-      scoreB.correctAttempts /
-      Math.max(1, scoreB.wrongAttempts + scoreB.correctAttempts);
-    if (Math.abs(ratioA - ratioB) > 0.1) {
-      return ratioB - ratioA;
-    }
-
-    // 6. Menos colisões
-    if (scoreA.collisions !== scoreB.collisions) {
-      return scoreA.collisions - scoreB.collisions;
-    }
-
-    // 7. Mais tempo vivo (exploração)
-    return scoreB.age - scoreA.age;
+    
+    // 2. Score agregado normalizado
+    const aggregateA = scoreA.efficiency + scoreA.exploration + scoreA.survival;
+    const aggregateB = scoreB.efficiency + scoreB.exploration + scoreB.survival;
+    
+    return aggregateB - aggregateA;
   },
+
+
 
   /**
    * Calcula distância ao objetivo atual

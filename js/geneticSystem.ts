@@ -159,16 +159,28 @@ const GeneticSystemImpl = {
     const genome2 = parent2.genome;
     const childGenome = new GenomeClass(rng);
 
-    // Cruzamento uniforme nos pesos
-    for (let i = 0; i < genome1.weights.length; i++) {
-      childGenome.weights[i] =
-        rng.rand() < 0.5 ? genome1.weights[i] : genome2.weights[i];
+    // Cruzamento uniforme nos pesos ocultos
+    for (let i = 0; i < genome1.hiddenWeights.length; i++) {
+      childGenome.hiddenWeights[i] =
+        rng.rand() < 0.5 ? genome1.hiddenWeights[i] : genome2.hiddenWeights[i];
     }
 
-    // Cruzamento nos biases
-    for (let i = 0; i < genome1.biases.length; i++) {
-      childGenome.biases[i] =
-        rng.rand() < 0.5 ? genome1.biases[i] : genome2.biases[i];
+    // Cruzamento nos biases ocultos
+    for (let i = 0; i < genome1.hiddenBiases.length; i++) {
+      childGenome.hiddenBiases[i] =
+        rng.rand() < 0.5 ? genome1.hiddenBiases[i] : genome2.hiddenBiases[i];
+    }
+
+    // Cruzamento nos pesos de saída
+    for (let i = 0; i < genome1.outputWeights.length; i++) {
+      childGenome.outputWeights[i] =
+        rng.rand() < 0.5 ? genome1.outputWeights[i] : genome2.outputWeights[i];
+    }
+
+    // Cruzamento nos biases de saída
+    for (let i = 0; i < genome1.outputBiases.length; i++) {
+      childGenome.outputBiases[i] =
+        rng.rand() < 0.5 ? genome1.outputBiases[i] : genome2.outputBiases[i];
     }
 
     // Média nos sensores
@@ -180,8 +192,11 @@ const GeneticSystemImpl = {
 
     // Mutação leve no filho
     const lightMutation = this.state.adaptiveSigma * 0.3;
-    for (let i = 0; i < childGenome.weights.length; i++) {
-      childGenome.weights[i] += rng.gaussian(0, lightMutation);
+    for (let i = 0; i < childGenome.hiddenWeights.length; i++) {
+      childGenome.hiddenWeights[i] += rng.gaussian(0, lightMutation);
+    }
+    for (let i = 0; i < childGenome.outputWeights.length; i++) {
+      childGenome.outputWeights[i] += rng.gaussian(0, lightMutation);
     }
 
     return this._createAgentFromGenome(childGenome, world, rng, AgentClass);
@@ -261,10 +276,10 @@ const GeneticSystemImpl = {
    */
   _genomicDistance(genome1: Genome, genome2: Genome): number {
     let distance = 0;
-    const sampleSize = Math.min(50, genome1.weights.length);
+    const sampleSize = Math.min(50, genome1.hiddenWeights.length);
 
     for (let i = 0; i < sampleSize; i++) {
-      const diff = genome1.weights[i] - genome2.weights[i];
+      const diff = genome1.hiddenWeights[i] - genome2.hiddenWeights[i];
       distance += diff * diff;
     }
 

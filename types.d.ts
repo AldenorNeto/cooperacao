@@ -47,6 +47,7 @@ interface Agent extends Point {
   correctMineAttempts?: number;
   wrongMineAttempts?: number;
   detailedScore?: any;
+  hasLeftBase: boolean;
   record(): void;
 }
 
@@ -62,9 +63,12 @@ interface Genome {
   sensorAngles: Float32Array;
   sensorRange: number;
   inputs: number;
+  hidden: number;
   outputs: number;
-  weights: Float32Array;
-  biases: Float32Array;
+  hiddenWeights: Float32Array;
+  hiddenBiases: Float32Array;
+  outputWeights: Float32Array;
+  outputBiases: Float32Array;
   clone(): Genome;
   mutate(rng: any, sigma: number): Genome;
   feed(inputs: number[]): number[];
@@ -138,6 +142,7 @@ interface Config {
   };
   GENOME: {
     INPUTS: number;
+    HIDDEN: number;
     OUTPUTS: number;
     SENSOR_ANGLE_BASE: number;
     SENSOR_ANGLE_VARIATION: number;

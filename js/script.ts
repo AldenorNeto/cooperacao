@@ -41,6 +41,7 @@
 
     GENOME: {
       INPUTS: 21,
+      HIDDEN: 8,
       OUTPUTS: 3,
       SENSOR_ANGLE_BASE: 0.35,
       SENSOR_ANGLE_VARIATION: 0.15,
@@ -165,6 +166,7 @@
     id: number;
     lastSeen?: { angle: number | null; dist: number | null };
     sensorData?: SensorData[];
+    hasLeftBase: boolean;
 
     constructor(
       x: number,
@@ -190,6 +192,7 @@
       this.fitness = 0;
       this.genome = genome;
       this.id = Math.floor(Math.random() * 1e9);
+      this.hasLeftBase = false;
     }
     record() {
       this.trail.push({ x: this.x, y: this.y });
@@ -201,9 +204,12 @@
     sensorAngles: Float32Array;
     sensorRange: number;
     inputs: number;
+    hidden: number;
     outputs: number;
-    weights: Float32Array;
-    biases: Float32Array;
+    hiddenWeights: Float32Array;
+    hiddenBiases: Float32Array;
+    outputWeights: Float32Array;
+    outputBiases: Float32Array;
 
     constructor(rng: RNG) {
       this.sensorAngles = new Float32Array(CONFIG.AGENT.SENSOR_COUNT);
@@ -218,23 +224,35 @@
         CONFIG.GENOME.SENSOR_RANGE_MIN,
         CONFIG.GENOME.SENSOR_RANGE_MAX
       );
-      this.inputs = 21;
+      this.inputs = CONFIG.GENOME.INPUTS;
+      this.hidden = CONFIG.GENOME.HIDDEN;
       this.outputs = CONFIG.GENOME.OUTPUTS;
-      this.weights = new Float32Array(this.inputs * this.outputs);
-      this.biases = new Float32Array(this.outputs);
-      for (let i = 0; i < this.weights.length; i++)
-        this.weights[i] = rng.gaussian(0, CONFIG.GENOME.WEIGHT_INIT_STD);
-      for (let i = 0; i < this.biases.length; i++)
-        this.biases[i] = rng.gaussian(0, CONFIG.GENOME.BIAS_INIT_STD);
+      
+      this.hiddenWeights = new Float32Array(this.inputs * this.hidden);
+      this.hiddenBiases = new Float32Array(this.hidden);
+      this.outputWeights = new Float32Array(this.hidden * this.outputs);
+      this.outputBiases = new Float32Array(this.outputs);
+      
+      for (let i = 0; i < this.hiddenWeights.length; i++)
+        this.hiddenWeights[i] = rng.gaussian(0, CONFIG.GENOME.WEIGHT_INIT_STD);
+      for (let i = 0; i < this.hiddenBiases.length; i++)
+        this.hiddenBiases[i] = rng.gaussian(0, CONFIG.GENOME.BIAS_INIT_STD);
+      for (let i = 0; i < this.outputWeights.length; i++)
+        this.outputWeights[i] = rng.gaussian(0, CONFIG.GENOME.WEIGHT_INIT_STD);
+      for (let i = 0; i < this.outputBiases.length; i++)
+        this.outputBiases[i] = rng.gaussian(0, CONFIG.GENOME.BIAS_INIT_STD);
     }
     clone() {
       const g = Object.create(Genome.prototype);
       g.sensorAngles = new Float32Array(this.sensorAngles);
       g.sensorRange = this.sensorRange;
       g.inputs = this.inputs;
+      g.hidden = this.hidden;
       g.outputs = this.outputs;
-      g.weights = new Float32Array(this.weights);
-      g.biases = new Float32Array(this.biases);
+      g.hiddenWeights = new Float32Array(this.hiddenWeights);
+      g.hiddenBiases = new Float32Array(this.hiddenBiases);
+      g.outputWeights = new Float32Array(this.outputWeights);
+      g.outputBiases = new Float32Array(this.outputBiases);
       return g;
     }
     mutate(rng: RNG, sigma: number): Genome {
@@ -245,37 +263,48 @@
       g.sensorRange +=
         rng.gaussian(0, 1) * sigma * CONFIG.GENOME.MUTATION_RANGE_FACTOR;
       g.sensorRange = Math.max(CONFIG.GENOME.MIN_SENSOR_RANGE, g.sensorRange);
-      for (let i = 0; i < g.weights.length; i++)
-        g.weights[i] += rng.gaussian(0, 1) * sigma;
-      for (let i = 0; i < g.biases.length; i++)
-        g.biases[i] += rng.gaussian(0, 1) * sigma;
+      
+      for (let i = 0; i < g.hiddenWeights.length; i++)
+        g.hiddenWeights[i] += rng.gaussian(0, 1) * sigma;
+      for (let i = 0; i < g.hiddenBiases.length; i++)
+        g.hiddenBiases[i] += rng.gaussian(0, 1) * sigma;
+      for (let i = 0; i < g.outputWeights.length; i++)
+        g.outputWeights[i] += rng.gaussian(0, 1) * sigma;
+      for (let i = 0; i < g.outputBiases.length; i++)
+        g.outputBiases[i] += rng.gaussian(0, 1) * sigma;
       return g;
     }
     feed(inputs: number[]): number[] {
-      let acc = 0,
-        rot = 0,
-        mine = 0;
-      const N = this.inputs;
-      for (let i = 0; i < N; i++) {
-        const x = inputs[i];
-        acc += x * this.weights[i];
-        rot += x * this.weights[i + N];
-        mine += x * this.weights[i + 2 * N];
+      // Camada oculta
+      const hidden = new Array(this.hidden);
+      for (let h = 0; h < this.hidden; h++) {
+        let sum = this.hiddenBiases[h];
+        for (let i = 0; i < this.inputs; i++) {
+          sum += inputs[i] * this.hiddenWeights[i * this.hidden + h];
+        }
+        hidden[h] = Math.tanh(sum);
       }
-      acc += this.biases[0];
-      rot += this.biases[1];
-      mine += this.biases[2];
-      acc = 1 / (1 + Math.exp(-acc));
-      rot = Math.tanh(rot);
-      mine = 1 / (1 + Math.exp(-mine));
-      return [acc, rot, mine];
+      
+      // Camada de saída
+      const outputs = new Array(this.outputs);
+      for (let o = 0; o < this.outputs; o++) {
+        let sum = this.outputBiases[o];
+        for (let h = 0; h < this.hidden; h++) {
+          sum += hidden[h] * this.outputWeights[h * this.outputs + o];
+        }
+        outputs[o] = o === 1 ? Math.tanh(sum) : 1 / (1 + Math.exp(-sum));
+      }
+      
+      return outputs;
     }
     serialize() {
       return JSON.stringify({
         sensorAngles: Array.from(this.sensorAngles),
         sensorRange: this.sensorRange,
-        weights: Array.from(this.weights),
-        biases: Array.from(this.biases),
+        hiddenWeights: Array.from(this.hiddenWeights),
+        hiddenBiases: Array.from(this.hiddenBiases),
+        outputWeights: Array.from(this.outputWeights),
+        outputBiases: Array.from(this.outputBiases),
       });
     }
     static deserialize(json: string): Genome {
@@ -283,10 +312,13 @@
       const g = Object.create(Genome.prototype);
       g.sensorAngles = new Float32Array(o.sensorAngles);
       g.sensorRange = o.sensorRange;
-      g.inputs = 21;
+      g.inputs = CONFIG.GENOME.INPUTS;
+      g.hidden = CONFIG.GENOME.HIDDEN;
       g.outputs = CONFIG.GENOME.OUTPUTS;
-      g.weights = new Float32Array(o.weights);
-      g.biases = new Float32Array(o.biases);
+      g.hiddenWeights = new Float32Array(o.hiddenWeights || []);
+      g.hiddenBiases = new Float32Array(o.hiddenBiases || []);
+      g.outputWeights = new Float32Array(o.outputWeights || []);
+      g.outputBiases = new Float32Array(o.outputBiases || []);
       return g;
     }
   }
@@ -382,18 +414,19 @@
         attemptedDeposit = false;
 
       // PRIMEIRO: Verifica depósito automático (independente da decisão da rede neural)
-      if (
-        agent.carry &&
-        dist(agent.x, agent.y, world.base.x, world.base.y) <
-          world.base.r + CONFIG.ACTIONS.DEPOSIT_DISTANCE
-      ) {
-        attemptedDeposit = true;
-        agent.delivered++;
-        agent.deliveries++;
-        agent.carry = false;
-        agent.state = "SEEK";
-        justDeposited = true;
-        return { justPicked, justDeposited, attemptedMine, attemptedDeposit };
+      if (agent.carry) {
+        const dx = agent.x - world.base.x;
+        const dy = agent.y - world.base.y;
+        const maxDist = world.base.r + CONFIG.ACTIONS.DEPOSIT_DISTANCE;
+        if (dx * dx + dy * dy < maxDist * maxDist) {
+          attemptedDeposit = true;
+          agent.delivered++;
+          agent.deliveries++;
+          agent.carry = false;
+          agent.state = "SEEK";
+          justDeposited = true;
+          return { justPicked, justDeposited, attemptedMine, attemptedDeposit };
+        }
       }
 
       // DEPOIS: Processa decisão de mineração da rede neural
@@ -430,13 +463,15 @@
     }
 
     _findNearStone(agent: Agent, world: World): Stone | null {
+      const maxDist = CONFIG.ACTIONS.STONE_PICKUP_DISTANCE;
       for (const s of world.stones) {
-        if (
-          s.quantity > 0 &&
-          dist(agent.x, agent.y, s.x, s.y) <
-            s.r + CONFIG.ACTIONS.STONE_PICKUP_DISTANCE
-        ) {
-          return s;
+        if (s.quantity > 0) {
+          const dx = agent.x - s.x;
+          const dy = agent.y - s.y;
+          const threshold = s.r + maxDist;
+          if (dx * dx + dy * dy < threshold * threshold) {
+            return s;
+          }
         }
       }
       return null;
@@ -494,8 +529,10 @@
       // Obstacle collisions - simplified repulsion
       for (const ob of world.obstacles) {
         if (pointInRect(agent.x, agent.y, ob)) {
-          agent.x += (agent.x > ob.x + ob.w/2 ? 1 : -1) * CONFIG.PHYSICS.COLLISION_PUSH_DISTANCE;
-          agent.y += (agent.y > ob.y + ob.h/2 ? 1 : -1) * CONFIG.PHYSICS.COLLISION_PUSH_DISTANCE;
+          const centerX = ob.x + ob.w * 0.5;
+          const centerY = ob.y + ob.h * 0.5;
+          agent.x += (agent.x > centerX ? 1 : -1) * CONFIG.PHYSICS.COLLISION_PUSH_DISTANCE;
+          agent.y += (agent.y > centerY ? 1 : -1) * CONFIG.PHYSICS.COLLISION_PUSH_DISTANCE;
           agent.collisions++;
           agent.fitness += RewardSystem.calculateCollisionPenalty("obstacle");
         }
@@ -637,6 +674,9 @@
     }
 
     _updateAgentFitness(agent: Agent, info: ActionResult): void {
+      // Rastreia se agente saiu da base
+      this._trackBaseExit(agent, this.world);
+      
       // Usa o sistema de recompensas externo
       const reward = RewardSystem.calculateTotalFitness(
         agent,
@@ -644,6 +684,21 @@
         this.world
       );
       agent.fitness += reward;
+    }
+
+    _trackBaseExit(agent: Agent, world: World): void {
+      const distToBase = dist(agent.x, agent.y, world.base.x, world.base.y);
+      const baseRadius = world.base.r + 25; // Margem para considerar "fora da base"
+      
+      // Marca que saiu da base se estiver longe o suficiente
+      if (distToBase > baseRadius) {
+        agent.hasLeftBase = true;
+      }
+      
+      // Reset quando deposita (volta à base)
+      if (agent.delivered > 0 && distToBase <= baseRadius) {
+        agent.hasLeftBase = false;
+      }
     }
 
     endGeneration() {
@@ -906,12 +961,6 @@
     draw(SIM.world, SIM.population, SIM);
     if (SIM.sanityFailed)
       Renderer.drawRedText(ctx, "Sanity check failed - reset required");
-
-    // Atualiza labels sempre
-    UI.labels.gen.innerText = SIM.generation;
-    UI.labels.best.innerText = SIM.bestFitness;
-    UI.labels.bestdel.innerText = SIM.bestDelivered;
-    UI.labels.popSize.innerText = SIM.population.length;
 
     requestAnimationFrame(loop);
   }
