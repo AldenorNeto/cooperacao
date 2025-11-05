@@ -609,6 +609,10 @@
         Agent,
         Genome
       );
+      
+      // Calcula total de entregas da população
+      const totalDelivered = this.population.reduce((sum, agent) => sum + agent.delivered, 0);
+      
       this.population = evolutionResult.population;
       this.bestFitness = Math.round(evolutionResult.bestFitness * 100) / 100;
       this.bestDelivered = evolutionResult.bestDelivered;
@@ -616,10 +620,12 @@
       this.regenStones(this.population.length + 2);
       this.genStepCount = 0;
       this.saveToStorage();
+      
       ChartManager.addFitnessPoint(
         this.generation,
         this.bestFitness,
-        this.bestDelivered
+        this.bestDelivered,
+        totalDelivered
       );
     }
 

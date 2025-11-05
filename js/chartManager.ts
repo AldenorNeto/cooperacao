@@ -25,12 +25,14 @@ const ChartManagerImpl = {
   addFitnessPoint(
     generation: number,
     fitness: number,
-    delivered: number
+    delivered: number,
+    totalDelivered: number = 0
   ): void {
     this.fitnessHistory.push({
       generation,
       fitness,
       delivered,
+      totalDelivered,
       timestamp: Date.now(),
     });
 
@@ -109,6 +111,16 @@ const ChartManagerImpl = {
       maxGen,
       adjustedMinFit,
       adjustedMaxFit
+    );
+
+    // Desenha linha do total de entregas
+    this.drawTotalDeliveryLine(
+      ctx,
+      padding,
+      chartWidth,
+      chartHeight,
+      minGen,
+      maxGen
     );
   },
 
@@ -212,6 +224,46 @@ const ChartManagerImpl = {
         ctx.fill();
       }
     }
+  },
+
+  drawTotalDeliveryLine(
+    ctx: CanvasRenderingContext2D,
+    padding: number,
+    chartWidth: number,
+    chartHeight: number,
+    minGen: number,
+    maxGen: number
+  ): void {
+    if (this.fitnessHistory.length < 2) return;
+
+    const maxTotal = Math.max(...this.fitnessHistory.map(p => p.totalDelivered || 0));
+    if (maxTotal === 0) return;
+
+    ctx.strokeStyle = "#ff6b35";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+
+    for (let i = 0; i < this.fitnessHistory.length; i++) {
+      const point = this.fitnessHistory[i];
+      const x = padding + ((point.generation - minGen) / (maxGen - minGen)) * chartWidth;
+      const y = padding + chartHeight - ((point.totalDelivered || 0) / maxTotal) * (chartHeight * 0.3);
+
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Label para total
+    ctx.fillStyle = "#ff6b35";
+    ctx.font = "9px monospace";
+    ctx.textAlign = "left";
+    ctx.fillText(`Total: ${maxTotal}`, padding + 5, padding + 15);
   },
 
   saveToStorage(): void {

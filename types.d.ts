@@ -228,7 +228,7 @@ declare const DOMManager: {
 
 declare const ChartManager: {
   init(): void;
-  addFitnessPoint(generation: number, fitness: number, delivered: number): void;
+  addFitnessPoint(generation: number, fitness: number, delivered: number, totalDelivered?: number): void;
   clearHistory(): void;
 };
 
