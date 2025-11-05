@@ -32,7 +32,15 @@ interface Agent extends Point {
   carry: boolean;
   mineTimer: number;
   depositTimer: number;
-  memory: { angle: number; dist: number };
+  memory: { 
+    angle: number; 
+    dist: number;
+    successfulPaths?: any[];
+    lastSuccessfulAction?: any;
+    lastPickupPosition?: Point;
+    lastDeliveryCount?: number;
+    lastSuccessfulReturnPath?: Point[];
+  };
   delivered: number;
   deliveries: number;
   hasMinedBefore: boolean;
@@ -222,6 +230,11 @@ declare const ChartManager: {
   init(): void;
   addFitnessPoint(generation: number, fitness: number, delivered: number): void;
   clearHistory(): void;
+};
+
+declare const MemorySystem: {
+  recordSuccessfulBehavior(agent: Agent, world: World): void;
+  calculateMemoryBonus(agent: Agent, world: World): number;
 };
 
 // Interfaces abstratas para sistemas

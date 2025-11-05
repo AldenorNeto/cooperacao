@@ -1,14 +1,14 @@
 const GeneticSystemImpl = {
   // Configurações do sistema genético
   CONFIG: {
-    ELITE_PERCENTAGE: 0.15, // 15% dos melhores são preservados
-    CROSSOVER_PERCENTAGE: 0.6, // 60% da nova população vem de cruzamento
-    MUTATION_PERCENTAGE: 0.2, // 20% são mutações puras
-    RANDOM_PERCENTAGE: 0.05, // 5% são completamente aleatórios
+    ELITE_PERCENTAGE: 0.20, // 20% dos melhores são preservados
+    CROSSOVER_PERCENTAGE: 0.55, // 55% da nova população vem de cruzamento
+    MUTATION_PERCENTAGE: 0.25, // 25% são mutações puras
+    RANDOM_PERCENTAGE: 0.00, // 0% são completamente aleatórios
 
     CROSSOVER_RATE: 0.7, // Probabilidade de cruzamento vs clonagem
-    MUTATION_STRENGTH_MIN: 0.05, // Mutação mínima
-    MUTATION_STRENGTH_MAX: 0.3, // Mutação máxima
+    MUTATION_STRENGTH_MIN: 0.08, // Mutação mínima (aumentada)
+    MUTATION_STRENGTH_MAX: 0.5, // Mutação máxima (aumentada)
 
     DIVERSITY_THRESHOLD: 0.1, // Limite para detectar baixa diversidade
     STAGNATION_GENERATIONS: 10, // Gerações sem melhoria = estagnação
@@ -309,18 +309,18 @@ const GeneticSystemImpl = {
 
     this.state.lastBestFitness = currentBestFitness;
 
-    // Ajusta sigma adaptativamente
+    // Ajusta sigma adaptativamente (mais agressivo)
     if (this.state.stagnationCount > this.CONFIG.STAGNATION_GENERATIONS) {
       // Aumenta mutação se estagnado
       this.state.adaptiveSigma = Math.min(
         this.CONFIG.MUTATION_STRENGTH_MAX,
-        this.state.adaptiveSigma * 1.1
+        this.state.adaptiveSigma * 1.3
       );
     } else {
-      // Diminui mutação se progredindo
+      // Diminui mutação se progredindo (mais devagar)
       this.state.adaptiveSigma = Math.max(
         this.CONFIG.MUTATION_STRENGTH_MIN,
-        this.state.adaptiveSigma * 0.99
+        this.state.adaptiveSigma * 0.995
       );
     }
 

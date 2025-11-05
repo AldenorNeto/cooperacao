@@ -1,14 +1,9 @@
 (() => {
   const SEED: number | null = null;
+
   const CONFIG = {
-    POPULATION: {
-      LAMBDA: 99,
-      MIN_SIZE: 50,
-      MAX_SIZE: 300,
-    },
-    GENETIC: {
-      SIGMA: 0.15,
-    },
+    POPULATION: { LAMBDA: 99, MIN_SIZE: 50, MAX_SIZE: 300 },
+    GENETIC: { SIGMA: 0.15 },
     SIMULATION: {
       GEN_SECONDS: 30,
       STEPS_PER_GEN: 1800,
@@ -37,8 +32,6 @@
       COLLISION_PUSH_DISTANCE: 4,
       BOUNDARY_MARGIN: 2,
     },
-
-
     GENOME: {
       INPUTS: 21,
       HIDDEN: 8,
@@ -60,7 +53,6 @@
       RANDOM_ROTATION: 0.002,
     },
   };
-
 
   class RNG {
     private _useMath: boolean;
@@ -116,7 +108,6 @@
   let rng: RNG = new RNG(SEED);
   let SIM: Simulation | null = null;
 
-  // Utilitários geométricos movidos para utils.js
   const {
     clamp,
     distance: dist,
@@ -131,18 +122,13 @@
     base: Base;
     stones: Stone[];
     obstacles: Rect[];
-
-
     constructor(w: number, h: number) {
       this.w = w;
       this.h = h;
       this.base = { x: w / 2, y: h / 2, r: CONFIG.AGENT.BASE_RADIUS };
       this.stones = [];
       this.obstacles = [];
-
     }
-
-
   }
 
   class Agent {
@@ -184,8 +170,8 @@
       this.depositTimer = 0;
       this.memory = { angle: 0, dist: 0 };
       this.delivered = 0;
-      this.deliveries = 0; // Para sistema lexicográfico
-      this.hasMinedBefore = false; // Para sistema lexicográfico
+      this.deliveries = 0;
+      this.hasMinedBefore = false;
       this.collisions = 0;
       this.age = 0;
       this.trail = [];
@@ -227,12 +213,12 @@
       this.inputs = CONFIG.GENOME.INPUTS;
       this.hidden = CONFIG.GENOME.HIDDEN;
       this.outputs = CONFIG.GENOME.OUTPUTS;
-      
+
       this.hiddenWeights = new Float32Array(this.inputs * this.hidden);
       this.hiddenBiases = new Float32Array(this.hidden);
       this.outputWeights = new Float32Array(this.hidden * this.outputs);
       this.outputBiases = new Float32Array(this.outputs);
-      
+
       for (let i = 0; i < this.hiddenWeights.length; i++)
         this.hiddenWeights[i] = rng.gaussian(0, CONFIG.GENOME.WEIGHT_INIT_STD);
       for (let i = 0; i < this.hiddenBiases.length; i++)
@@ -242,6 +228,7 @@
       for (let i = 0; i < this.outputBiases.length; i++)
         this.outputBiases[i] = rng.gaussian(0, CONFIG.GENOME.BIAS_INIT_STD);
     }
+
     clone() {
       const g = Object.create(Genome.prototype);
       g.sensorAngles = new Float32Array(this.sensorAngles);
@@ -255,6 +242,7 @@
       g.outputBiases = new Float32Array(this.outputBiases);
       return g;
     }
+
     mutate(rng: RNG, sigma: number): Genome {
       const g = this.clone();
       for (let i = 0; i < g.sensorAngles.length; i++)
@@ -263,7 +251,6 @@
       g.sensorRange +=
         rng.gaussian(0, 1) * sigma * CONFIG.GENOME.MUTATION_RANGE_FACTOR;
       g.sensorRange = Math.max(CONFIG.GENOME.MIN_SENSOR_RANGE, g.sensorRange);
-      
       for (let i = 0; i < g.hiddenWeights.length; i++)
         g.hiddenWeights[i] += rng.gaussian(0, 1) * sigma;
       for (let i = 0; i < g.hiddenBiases.length; i++)
@@ -274,29 +261,25 @@
         g.outputBiases[i] += rng.gaussian(0, 1) * sigma;
       return g;
     }
+
     feed(inputs: number[]): number[] {
-      // Camada oculta
       const hidden = new Array(this.hidden);
       for (let h = 0; h < this.hidden; h++) {
         let sum = this.hiddenBiases[h];
-        for (let i = 0; i < this.inputs; i++) {
+        for (let i = 0; i < this.inputs; i++)
           sum += inputs[i] * this.hiddenWeights[i * this.hidden + h];
-        }
         hidden[h] = Math.tanh(sum);
       }
-      
-      // Camada de saída
       const outputs = new Array(this.outputs);
       for (let o = 0; o < this.outputs; o++) {
         let sum = this.outputBiases[o];
-        for (let h = 0; h < this.hidden; h++) {
+        for (let h = 0; h < this.hidden; h++)
           sum += hidden[h] * this.outputWeights[h * this.outputs + o];
-        }
         outputs[o] = o === 1 ? Math.tanh(sum) : 1 / (1 + Math.exp(-sum));
       }
-      
       return outputs;
     }
+
     serialize() {
       return JSON.stringify({
         sensorAngles: Array.from(this.sensorAngles),
@@ -307,6 +290,7 @@
         outputBiases: Array.from(this.outputBiases),
       });
     }
+
     static deserialize(json: string): Genome {
       const o = JSON.parse(json);
       const g = Object.create(Genome.prototype);
@@ -333,13 +317,10 @@
     lambda: number;
     sigma: number;
     world: World;
-
     generation: number;
     running: boolean;
     showSensors: boolean;
     showTrails: boolean;
-
-
     debug: boolean;
     population: Agent[];
     maxPopulation: number;
@@ -360,12 +341,10 @@
       this.lambda = CONFIG.POPULATION.LAMBDA;
       this.sigma = CONFIG.GENETIC.SIGMA;
       this.world = new World(canvas.width, canvas.height);
-
       this.generation = 0;
       this.running = false;
       this.showSensors = false;
       this.showTrails = false;
-
       this.debug = false;
       this.population = [];
       this.maxPopulation = CONFIG.SIMULATION.MAX_POPULATION;
@@ -413,10 +392,9 @@
         attemptedMine = false,
         attemptedDeposit = false;
 
-      // PRIMEIRO: Verifica depósito automático (independente da decisão da rede neural)
       if (agent.carry) {
-        const dx = agent.x - world.base.x;
-        const dy = agent.y - world.base.y;
+        const dx = agent.x - world.base.x,
+          dy = agent.y - world.base.y;
         const maxDist = world.base.r + CONFIG.ACTIONS.DEPOSIT_DISTANCE;
         if (dx * dx + dy * dy < maxDist * maxDist) {
           attemptedDeposit = true;
@@ -429,17 +407,13 @@
         }
       }
 
-      // DEPOIS: Processa decisão de mineração da rede neural
       const wantsToMine = mineOut > CONFIG.ACTIONS.MINE_THRESHOLD;
-
       if (wantsToMine) {
         attemptedMine = true;
-
         const nearStone = this._findNearStone(agent, world);
         if (nearStone && !agent.carry) {
           agent.state = "MINING";
           agent.mineTimer = (agent.mineTimer || 0) + 1;
-
           if (agent.mineTimer >= CONFIG.AGENT.MINE_TIMER_BASE) {
             nearStone.quantity = Math.max(0, nearStone.quantity - 1);
             agent.carry = true;
@@ -458,7 +432,6 @@
           agent.depositTimer = 0;
         }
       }
-
       return { justPicked, justDeposited, attemptedMine, attemptedDeposit };
     }
 
@@ -466,12 +439,10 @@
       const maxDist = CONFIG.ACTIONS.STONE_PICKUP_DISTANCE;
       for (const s of world.stones) {
         if (s.quantity > 0) {
-          const dx = agent.x - s.x;
-          const dy = agent.y - s.y;
-          const threshold = s.r + maxDist;
-          if (dx * dx + dy * dy < threshold * threshold) {
-            return s;
-          }
+          const dx = agent.x - s.x,
+            dy = agent.y - s.y,
+            threshold = s.r + maxDist;
+          if (dx * dx + dy * dy < threshold * threshold) return s;
         }
       }
       return null;
@@ -483,14 +454,10 @@
       rot: number,
       maxSpeed: number
     ): void {
-      // Agente só pode se mover se NÃO estiver minerando ou depositando
       if (agent.state === "MINING" || agent.state === "DEPOSIT") {
-        // Completamente imóvel durante mineração/depósito
         agent.v = 0;
         return;
       }
-
-      // Movimento normal apenas quando em estado SEEK
       agent.v =
         agent.v * CONFIG.PHYSICS.VELOCITY_DECAY +
         acc * maxSpeed * CONFIG.PHYSICS.ACCELERATION_FACTOR;
@@ -500,7 +467,6 @@
     }
 
     _handleCollisions(agent: Agent, world: World): void {
-      // Boundary collisions
       if (agent.x < CONFIG.PHYSICS.BOUNDARY_MARGIN) {
         agent.x = CONFIG.PHYSICS.BOUNDARY_MARGIN;
         agent.v *= CONFIG.PHYSICS.COLLISION_VELOCITY_FACTOR;
@@ -526,27 +492,26 @@
         agent.fitness += RewardSystem.calculateCollisionPenalty("boundary");
       }
 
-      // Obstacle collisions - simplified repulsion
       for (const ob of world.obstacles) {
         if (pointInRect(agent.x, agent.y, ob)) {
-          const centerX = ob.x + ob.w * 0.5;
-          const centerY = ob.y + ob.h * 0.5;
-          agent.x += (agent.x > centerX ? 1 : -1) * CONFIG.PHYSICS.COLLISION_PUSH_DISTANCE;
-          agent.y += (agent.y > centerY ? 1 : -1) * CONFIG.PHYSICS.COLLISION_PUSH_DISTANCE;
+          const centerX = ob.x + ob.w * 0.5,
+            centerY = ob.y + ob.h * 0.5;
+          agent.x +=
+            (agent.x > centerX ? 1 : -1) *
+            CONFIG.PHYSICS.COLLISION_PUSH_DISTANCE;
+          agent.y +=
+            (agent.y > centerY ? 1 : -1) *
+            CONFIG.PHYSICS.COLLISION_PUSH_DISTANCE;
           agent.collisions++;
           agent.fitness += RewardSystem.calculateCollisionPenalty("obstacle");
         }
       }
     }
 
-
-
     initWorld() {
       const w = this.canvas.width,
         h = this.canvas.height;
       this.world = new World(w, h);
-
-      // Usa MapGenerator para criar o mundo
       this.world.base = MapGenerator.generateBase(w, h, rng);
       this.world.obstacles = MapGenerator.generateObstacles(
         w,
@@ -561,8 +526,7 @@
         this.world.obstacles,
         Math.max(this.lambda, this.minPopulation) * 3,
         rng
-      ); // 3x mais pedras
-
+      );
       this.buildPopulation();
       this.genStepCount = 0;
       if (this.genSeconds)
@@ -589,15 +553,9 @@
         this.maxPopulation - 1
       );
       const popSize = 1 + lambda;
-      console.log(
-        `BuildPopulation: lambda=${lambda}, popSize=${popSize}, current=${this.population.length}`
-      );
 
       if (this.population.length === 0) {
-        // Limpa localStorage para debug
         localStorage.removeItem(this.storageKey);
-
-        // Primeira geração: população aleatória
         this.population = [];
         for (let i = 0; i < popSize; i++) {
           const g = new Genome(rng);
@@ -609,32 +567,60 @@
           );
           this.population.push(a);
         }
-
-        console.log(`Nova população criada: ${this.population.length} agentes`);
       }
     }
 
-    adjustPopulationSize(targetSize: number): void {
-      if (this.population.length === targetSize) return;
-
-      if (this.population.length > targetSize) {
-        // Remove agentes excedentes (mantém os melhores)
-        this.population = this.population.slice(0, targetSize);
-      } else {
-        // Adiciona novos agentes baseados nos existentes
-        while (this.population.length < targetSize) {
-          const parent =
-            this.population[rng.int(Math.min(5, this.population.length))];
-          const mutatedGenome = parent.genome.mutate(rng, this.sigma);
-          const newAgent = new Agent(
-            this.world.base.x + this.world.base.r + 6 + rng.float(-6, 6),
-            this.world.base.y + rng.float(-6, 6),
-            rng.float(0, Math.PI * 2),
-            mutatedGenome
-          );
-          this.population.push(newAgent);
-        }
+    stepAll() {
+      if (!this.sanityCheck()) return;
+      const maxSpeed = CONFIG.PHYSICS.MAX_SPEED;
+      this.genStepCount++;
+      for (const agent of this.population) {
+        const info = this.stepAgent(agent, agent.genome, this.world, maxSpeed);
+        this._updateAgentFitness(agent, info);
+        agent.age++;
+        agent.record();
       }
+      if (this.genStepCount >= this.stepsPerGen) this.endGeneration();
+    }
+
+    _updateAgentFitness(agent: Agent, info: ActionResult): void {
+      this._trackBaseExit(agent, this.world);
+      const reward = RewardSystem.calculateTotalFitness(
+        agent,
+        info,
+        this.world
+      );
+      agent.fitness += reward;
+    }
+
+    _trackBaseExit(agent: Agent, world: World): void {
+      const distToBase = dist(agent.x, agent.y, world.base.x, world.base.y);
+      const baseRadius = world.base.r + 25;
+      if (distToBase > baseRadius) agent.hasLeftBase = true;
+      if (agent.delivered > 0 && distToBase <= baseRadius)
+        agent.hasLeftBase = false;
+    }
+
+    endGeneration() {
+      const evolutionResult = GeneticSystem.evolvePopulation(
+        this.population,
+        this.world,
+        rng,
+        Agent,
+        Genome
+      );
+      this.population = evolutionResult.population;
+      this.bestFitness = Math.round(evolutionResult.bestFitness * 100) / 100;
+      this.bestDelivered = evolutionResult.bestDelivered;
+      this.generation++;
+      this.regenStones(this.population.length + 2);
+      this.genStepCount = 0;
+      this.saveToStorage();
+      ChartManager.addFitnessPoint(
+        this.generation,
+        this.bestFitness,
+        this.bestDelivered
+      );
     }
 
     sanityCheck() {
@@ -652,96 +638,10 @@
         )
       )
         fail = "base out of bounds";
-
       this.sanityFailed = !!fail;
       if (this.sanityFailed) Renderer.drawRedText(this.ctx, fail);
       return !this.sanityFailed;
     }
-
-    stepAll() {
-      if (!this.sanityCheck()) return;
-      const maxSpeed = CONFIG.PHYSICS.MAX_SPEED;
-      this.genStepCount++;
-      
-      for (const agent of this.population) {
-        const info = this.stepAgent(agent, agent.genome, this.world, maxSpeed);
-        this._updateAgentFitness(agent, info);
-        agent.age++;
-        agent.record();
-      }
-
-      if (this.genStepCount >= this.stepsPerGen) this.endGeneration();
-    }
-
-    _updateAgentFitness(agent: Agent, info: ActionResult): void {
-      // Rastreia se agente saiu da base
-      this._trackBaseExit(agent, this.world);
-      
-      // Usa o sistema de recompensas externo
-      const reward = RewardSystem.calculateTotalFitness(
-        agent,
-        info,
-        this.world
-      );
-      agent.fitness += reward;
-    }
-
-    _trackBaseExit(agent: Agent, world: World): void {
-      const distToBase = dist(agent.x, agent.y, world.base.x, world.base.y);
-      const baseRadius = world.base.r + 25; // Margem para considerar "fora da base"
-      
-      // Marca que saiu da base se estiver longe o suficiente
-      if (distToBase > baseRadius) {
-        agent.hasLeftBase = true;
-      }
-      
-      // Reset quando deposita (volta à base)
-      if (agent.delivered > 0 && distToBase <= baseRadius) {
-        agent.hasLeftBase = false;
-      }
-    }
-
-    endGeneration() {
-      // Usa o novo sistema genético
-      const evolutionResult = GeneticSystem.evolvePopulation(
-        this.population,
-        this.world,
-        rng,
-        Agent,
-        Genome
-      );
-
-      this.population = evolutionResult.population;
-
-      this.bestFitness = Math.round(evolutionResult.bestFitness * 100) / 100;
-      this.bestDelivered = evolutionResult.bestDelivered;
-      this.generation++;
-
-      this.regenStones(this.population.length + 2);
-      this.genStepCount = 0;
-
-      // Salva estado atual
-      this.saveToStorage();
-
-
-
-      // Atualiza gráfico de fitness
-      ChartManager.addFitnessPoint(
-        this.generation,
-        this.bestFitness,
-        this.bestDelivered
-      );
-
-      // Debug do sistema genético
-      if (this.debug) {
-        const stats = GeneticSystem.getStats();
-        console.log(
-          `Gen ${this.generation}: Sigma=${stats.adaptiveSigma}, Diversity=${stats.diversity}, Stagnant=${stats.isStagnant}`
-        );
-      }
-    }
-
-
 
     saveToStorage() {
       try {
@@ -749,7 +649,6 @@
           generation: this.generation,
           bestFitness: this.bestFitness,
           bestDelivered: this.bestDelivered,
-
           population: this.population.map((agent) => ({
             genome: agent.genome.serialize(),
             fitness: agent.fitness,
@@ -768,15 +667,10 @@
       try {
         const saved = localStorage.getItem(this.storageKey);
         if (!saved) return false;
-
         const data = JSON.parse(saved);
-
         this.generation = data.generation || 0;
         this.bestFitness = data.bestFitness || 0;
         this.bestDelivered = data.bestDelivered || 0;
-
-
-
         if (data.population && data.population.length > 0) {
           this.population = data.population.map((agentData) => {
             const genome = Genome.deserialize(agentData.genome);
@@ -791,14 +685,11 @@
             return agent;
           });
         }
-
-        if (data.geneticState) {
+        if (data.geneticState)
           GeneticSystem.state = {
             ...GeneticSystem.state,
             ...data.geneticState,
           };
-        }
-
         return true;
       } catch (e) {
         console.warn("Erro ao carregar simulação:", e);
@@ -811,28 +702,8 @@
     }
   }
 
-  // Funções de desenho movidas para renderer.js
-  function draw(world: World, pop: Agent[], sim: Simulation): void {
-    if (pop && pop.length > 0) {
-      console.log(`Desenhando ${pop.length} agentes`);
-    }
-    Renderer.draw(world, pop, sim);
-  }
-
   function setup() {
-    resizeCanvas();
-    initializeSimulation();
-    setupInputs();
-
-    ChartManager.init();
-    setUIFromSim();
-    SIM.initWorld();
-    SIM.sanityCheck();
-    attachEvents();
-    requestAnimationFrame(loop);
-  }
-
-  function initializeSimulation() {
+    DOMManager.resizeCanvas();
     SIM = new Simulation(cvs, ctx);
     SIM.lambda = CONFIG.POPULATION.LAMBDA;
     SIM.sigma = CONFIG.GENETIC.SIGMA;
@@ -840,33 +711,15 @@
     SIM.stepsPerGen = CONFIG.SIMULATION.STEPS_PER_GEN;
     SIM.speed = CONFIG.SIMULATION.SPEED;
     (window as any).SIM = SIM;
-  }
+    ChartManager.init();
+    DOMManager.updateUI(SIM);
+    SIM.initWorld();
+    SIM.sanityCheck();
 
-  function setupInputs() {
-    // Inputs removidos - não há mais elementos para configurar
-  }
-
-  function resizeCanvas() {
-    DOMManager.resizeCanvas();
-  }
-
-  function attachEvents() {
-    attachWindowEvents();
-    attachCanvasEvents();
-    attachButtonEvents();
-    attachInputEvents();
-    attachToggleEvents();
-    attachKeyboardEvents();
-  }
-
-  function attachWindowEvents() {
     window.addEventListener("resize", () => {
-      resizeCanvas();
+      DOMManager.resizeCanvas();
       SIM.initWorld();
     });
-  }
-
-  function attachCanvasEvents() {
     cvs.addEventListener("click", (e) => {
       const r = cvs.getBoundingClientRect();
       const x = (e.clientX - r.left) * (cvs.width / r.width);
@@ -875,72 +728,34 @@
       SIM.world.base.y = y;
       SIM.initWorld();
     });
-  }
 
-  function attachButtonEvents() {
-    UI.buttons.reset.addEventListener("click", handleReset);
+    UI.buttons.reset.addEventListener("click", () => {
+      rng = new RNG(SEED);
+      SIM = new Simulation(cvs, ctx);
+      SIM.lambda = CONFIG.POPULATION.LAMBDA;
+      SIM.sigma = CONFIG.GENETIC.SIGMA;
+      SIM.genSeconds = CONFIG.SIMULATION.GEN_SECONDS;
+      SIM.stepsPerGen = CONFIG.SIMULATION.STEPS_PER_GEN;
+      SIM.speed = CONFIG.SIMULATION.SPEED;
+      SIM.clearStorage();
+      SIM.initWorld();
+      ChartManager.clearHistory();
+      DOMManager.updateUI(SIM);
+    });
+
     UI.buttons.start.addEventListener("click", () => {
-      console.log("Start clicked - População:", SIM.population.length);
       SIM.running = true;
     });
-  }
 
-  function attachInputEvents() {
-    // Inputs removidos - valores fixos no CONFIG
-  }
-
-  function attachToggleEvents() {
-    // Toggles removidos - valores fixos
-    SIM.showSensors = false;
-    SIM.showTrails = false;
-    SIM.debug = false;
-  }
-
-  function attachKeyboardEvents() {
     window.addEventListener("keydown", (e) => {
       if (e.code === "Space") SIM.running = !SIM.running;
       if (e.key === "n" || e.key === "N") {
         SIM.endGeneration();
-        setUIFromSim();
+        DOMManager.updateUI(SIM);
       }
     });
-  }
 
-  // Event handlers
-  function handleReset() {
-    rng = new RNG(SEED);
-    SIM = new Simulation(cvs, ctx);
-    SIM.lambda = CONFIG.POPULATION.LAMBDA;
-    SIM.sigma = CONFIG.GENETIC.SIGMA;
-    SIM.genSeconds = CONFIG.SIMULATION.GEN_SECONDS;
-    SIM.stepsPerGen = CONFIG.SIMULATION.STEPS_PER_GEN;
-    SIM.speed = CONFIG.SIMULATION.SPEED;
-    SIM.clearStorage();
-    SIM.initWorld();
-
-    ChartManager.clearHistory();
-    setUIFromSim();
-  }
-
-  function handleNextGeneration() {
-    if (!SIM.sanityCheck()) return;
-    SIM.endGeneration();
-    setUIFromSim();
-  }
-
-
-
-  function setUIFromSim() {
-    DOMManager.updateUI(SIM);
-
-    // Atualiza gráfico se há dados
-    if (SIM.generation > 0) {
-      ChartManager.addFitnessPoint(
-        SIM.generation,
-        SIM.bestFitness,
-        SIM.bestDelivered
-      );
-    }
+    requestAnimationFrame(loop);
   }
 
   function loop() {
@@ -948,24 +763,13 @@
       requestAnimationFrame(loop);
       return;
     }
-
-    // Teste visual simples
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, cvs.width, cvs.height);
-    ctx.fillStyle = "#ff0000";
-    ctx.fillRect(50, 50, 100, 100);
-
-    if (SIM.running) {
-      for (let i = 0; i < SIM.speed; i++) SIM.stepAll();
-    }
-    draw(SIM.world, SIM.population, SIM);
+    if (SIM.running) for (let i = 0; i < SIM.speed; i++) SIM.stepAll();
+    Renderer.draw(SIM.world, SIM.population, SIM);
     if (SIM.sanityFailed)
       Renderer.drawRedText(ctx, "Sanity check failed - reset required");
-
     requestAnimationFrame(loop);
   }
 
   setup();
-
   SIM.sanityCheck();
 })();

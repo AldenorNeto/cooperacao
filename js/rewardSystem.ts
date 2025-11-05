@@ -4,9 +4,9 @@ const RewardSystemImpl = {
 
   // Configurações de recompensas
   REWARDS: {
-    // Sucessos principais
-    STONE_PICKED: 400,
-    STONE_DELIVERED: 1200,
+    // Sucessos principais (aumentados drasticamente)
+    STONE_PICKED: 2000,
+    STONE_DELIVERED: 5000,
 
     // Ações corretas
     CORRECT_MINE_ATTEMPT: 2,
@@ -27,14 +27,16 @@ const RewardSystemImpl = {
     // Bonus base
     ALIVE_BONUS: 0.01,
 
-    // Bonus de retorno à base
-    RETURN_TO_BASE_BONUS: 15,
-    BASE_PROXIMITY_THRESHOLD: 60,
+    // Bonus de retorno à base (muito aumentado)
+    RETURN_TO_BASE_BONUS: 100,
+    BASE_PROXIMITY_THRESHOLD: 80,
+    CARRYING_BONUS: 10, // Novo: bonus contínuo por carregar
+    EXPLORATION_BONUS: 20, // Novo: bonus por sair da base
 
-    // Bonus de proximidade
+    // Bonus de proximidade (aumentados)
     PROXIMITY_MULTIPLIER: {
-      CARRYING_TO_BASE: 2.5,
-      SEEKING_STONES: 0.8,
+      CARRYING_TO_BASE: 15,
+      SEEKING_STONES: 5,
     },
   },
 
@@ -130,48 +132,58 @@ const RewardSystemImpl = {
   },
 
   /**
-   * Calcula bonus de retorno à base
+   * Calcula bonus de retorno à base (melhorado)
    */
   calculateReturnToBaseBonus(agent: Agent, world: World): number {
-    // Só dá bonus se: carregando pedra + já saiu da base
-    if (!agent.carry || !agent.hasLeftBase) return 0;
+    if (!agent.carry) return 0;
     
     const distToBase = this._distanceToBase(agent, world);
+    const maxDist = Math.hypot(world.w, world.h);
     
-    // Bonus progressivo conforme se aproxima da base
+    // Bonus contínuo e forte por carregar pedra em direção à base
+    const proximityFactor = Math.max(0, 1 - (distToBase / maxDist));
+    let bonus = proximityFactor * this.REWARDS.RETURN_TO_BASE_BONUS;
+    
+    // Bonus extra se muito perto da base
     if (distToBase <= this.REWARDS.BASE_PROXIMITY_THRESHOLD) {
-      const proximityFactor = 1 - (distToBase / this.REWARDS.BASE_PROXIMITY_THRESHOLD);
-      return proximityFactor * this.REWARDS.RETURN_TO_BASE_BONUS;
+      const nearnessFactor = 1 - (distToBase / this.REWARDS.BASE_PROXIMITY_THRESHOLD);
+      bonus += nearnessFactor * this.REWARDS.RETURN_TO_BASE_BONUS * 3;
     }
     
-    return 0;
+    return bonus;
   },
 
   /**
-   * Calcula bonus de proximidade
+   * Calcula bonus de proximidade (melhorado)
    */
   calculateProximityBonus(agent: Agent, world: World): number {
+    let bonus = 0;
+    
     if (agent.carry) {
       // Bonus por estar perto da base quando carregando
       const d = this._distanceToBase(agent, world);
       const normalizedDistance = d / Math.hypot(world.w, world.h);
       const proximityFactor = Math.max(0, 1 - normalizedDistance);
-      return (
-        proximityFactor * this.REWARDS.PROXIMITY_MULTIPLIER.CARRYING_TO_BASE
-      );
+      bonus += proximityFactor * this.REWARDS.PROXIMITY_MULTIPLIER.CARRYING_TO_BASE;
+      
+      // Bonus contínuo por carregar pedra
+      bonus += this.REWARDS.CARRYING_BONUS;
     } else {
       // Bonus por estar perto de pedras quando não carregando
       const nearestStoneDistance = this._findNearestStoneDistance(agent, world);
       if (nearestStoneDistance < Infinity) {
-        const normalizedDistance =
-          nearestStoneDistance / Math.hypot(world.w, world.h);
+        const normalizedDistance = nearestStoneDistance / Math.hypot(world.w, world.h);
         const proximityFactor = Math.max(0, 1 - normalizedDistance);
-        return (
-          proximityFactor * this.REWARDS.PROXIMITY_MULTIPLIER.SEEKING_STONES
-        );
+        bonus += proximityFactor * this.REWARDS.PROXIMITY_MULTIPLIER.SEEKING_STONES;
+      }
+      
+      // Bonus por exploração (sair da base)
+      if (agent.hasLeftBase) {
+        bonus += this.REWARDS.EXPLORATION_BONUS;
       }
     }
-    return 0;
+    
+    return bonus;
   },
 
   /**
@@ -218,13 +230,14 @@ const RewardSystemImpl = {
   },
 
   /**
-   * Determina o estágio do agente (0-4+)
+   * Determina o estágio do agente (0-5+) - sistema mais generoso
    */
   _calculateStage(agent: Agent): number {
+    if (agent.deliveries >= 3) return 5; // Múltiplas entregas avançadas
     if (agent.deliveries >= 2) return 4; // Múltiplas entregas
     if (agent.deliveries === 1) return 3; // Uma entrega completa
     if (agent.carry && agent.hasMinedBefore) return 2; // Retornando com pedra
-    if (agent.hasMinedBefore) return 1; // Já minerou
+    if (agent.hasMinedBefore || agent.hasLeftBase) return 1; // Já minerou ou explorou
     return 0; // Ainda explorando
   },
 
@@ -250,6 +263,11 @@ const RewardSystemImpl = {
 
     // Bonus de retorno à base
     points += this.calculateReturnToBaseBonus(agent, world);
+    
+    // Bonus de memória (se disponível)
+    if (typeof (window as any).MemorySystem !== 'undefined') {
+      points += (window as any).MemorySystem.calculateMemoryBonus(agent, world);
+    }
 
     // Bonus base por estar vivo
     points += this.REWARDS.ALIVE_BONUS;
