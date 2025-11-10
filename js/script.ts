@@ -3,7 +3,7 @@
 
   const CONFIG = {
     POPULATION: { LAMBDA: 99, MIN_SIZE: 50, MAX_SIZE: 300 },
-    GENETIC: { SIGMA: 0.15 },
+    GENETIC: { SIGMA: 0.25 },
     SIMULATION: {
       GEN_SECONDS: 30,
       STEPS_PER_GEN: 1800,
@@ -34,23 +34,23 @@
     },
     GENOME: {
       INPUTS: 21,
-      HIDDEN: 8,
+      HIDDEN: 12,
       OUTPUTS: 3,
       SENSOR_ANGLE_BASE: 0.35,
       SENSOR_ANGLE_VARIATION: 0.15,
-      SENSOR_RANGE_MIN: 80,
-      SENSOR_RANGE_MAX: 220,
-      WEIGHT_INIT_STD: 0.8,
-      BIAS_INIT_STD: 0.5,
-      MUTATION_SIGMA_FACTOR: 0.6,
-      MUTATION_RANGE_FACTOR: 20,
-      MIN_SENSOR_RANGE: 30,
+      SENSOR_RANGE_MIN: 120,
+      SENSOR_RANGE_MAX: 180,
+      WEIGHT_INIT_STD: 1.2,
+      BIAS_INIT_STD: 0.8,
+      MUTATION_SIGMA_FACTOR: 0.8,
+      MUTATION_RANGE_FACTOR: 30,
+      MIN_SENSOR_RANGE: 80,
     },
     ACTIONS: {
-      MINE_THRESHOLD: 0.6,
-      DEPOSIT_DISTANCE: 14,
-      STONE_PICKUP_DISTANCE: 12,
-      RANDOM_ROTATION: 0.002,
+      MINE_THRESHOLD: 0.5,
+      DEPOSIT_DISTANCE: 18,
+      STONE_PICKUP_DISTANCE: 15,
+      RANDOM_ROTATION: 0.01,
     },
   };
 
@@ -556,6 +556,7 @@
 
       if (this.population.length === 0) {
         localStorage.removeItem(this.storageKey);
+        
         this.population = [];
         for (let i = 0; i < popSize; i++) {
           const g = new Genome(rng);
@@ -602,6 +603,9 @@
     }
 
     endGeneration() {
+      // Calcula total de entregas da população
+      const totalDelivered = this.population.reduce((sum, agent) => sum + agent.delivered, 0);
+      
       const evolutionResult = GeneticSystem.evolvePopulation(
         this.population,
         this.world,
@@ -610,12 +614,15 @@
         Genome
       );
       
-      // Calcula total de entregas da população
-      const totalDelivered = this.population.reduce((sum, agent) => sum + agent.delivered, 0);
-      
       this.population = evolutionResult.population;
-      this.bestFitness = Math.round(evolutionResult.bestFitness * 100) / 100;
-      this.bestDelivered = evolutionResult.bestDelivered;
+      
+      // Atualizar estatísticas
+      const bestAgent = this.population.reduce((best, current) => 
+        current.fitness > best.fitness ? current : best
+      );
+      
+      this.bestFitness = Math.round(bestAgent.fitness * 100) / 100;
+      this.bestDelivered = bestAgent.delivered;
       this.generation++;
       this.regenStones(this.population.length + 2);
       this.genStepCount = 0;
@@ -680,6 +687,7 @@
         if (data.population && data.population.length > 0) {
           this.population = data.population.map((agentData) => {
             const genome = Genome.deserialize(agentData.genome);
+            
             const agent = new Agent(
               this.world.base.x + this.world.base.r + 6 + rng.float(-6, 6),
               this.world.base.y + rng.float(-6, 6),

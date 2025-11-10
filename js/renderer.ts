@@ -8,8 +8,6 @@ const RendererImpl = {
     this.drawUI(ctx, sim);
   },
 
-
-
   drawEnvironment(ctx: CanvasRenderingContext2D, world: World): void {
     // Obstáculos
     ctx.fillStyle = "#2b2f37";
@@ -47,8 +45,6 @@ const RendererImpl = {
     sim: any,
     world: World
   ): void {
-    console.log(`DrawAgents: ${population.length} agentes`);
-
     // Agentes
     for (const a of population) {
       ctx.save();

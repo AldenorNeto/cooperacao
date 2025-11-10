@@ -10,6 +10,9 @@
     "type-check:watch": "tsc --noEmit --watch",
     "lint": "tsc --noEmit && echo 'Type checking passed!'"
   },
+  "dependencies": {
+    "neatjs": "^1.0.0"
+  },
   "devDependencies": {
     "typescript": "^5.0.0",
     "@types/node": "^20.0.0",
