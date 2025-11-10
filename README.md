@@ -15,10 +15,6 @@ npm install
 
 # Executar em modo desenvolvimento (TypeScript)
 npm run dev
-
-# Ou compilar e executar
-npm run build
-npm start
 ```
 
 Acesse: http://localhost:3000

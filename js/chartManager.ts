@@ -1,4 +1,75 @@
-const ChartManagerImpl = {
+interface FitnessPoint {
+  generation: number;
+  fitness: number;
+  delivered: number;
+  totalDelivered?: number;
+  timestamp: number;
+}
+
+interface ChartManagerInterface {
+  fitnessHistory: FitnessPoint[];
+  maxHistory: number;
+  storageKey: string;
+  canvas: HTMLCanvasElement | null;
+  ctx: CanvasRenderingContext2D | null;
+  loadFromStorage?(): void;
+
+  init(): boolean;
+  setupCanvas(): void;
+  addFitnessPoint(
+    generation: number,
+    fitness: number,
+    delivered: number,
+    totalDelivered?: number
+  ): void;
+
+  draw(): void;
+
+  drawAxes(
+    ctx: CanvasRenderingContext2D,
+    padding: number,
+    width: number,
+    height: number,
+    minGen: number,
+    maxGen: number,
+    minFit: number,
+    maxFit: number
+  ): void;
+
+  drawFitnessLine(
+    ctx: CanvasRenderingContext2D,
+    padding: number,
+    chartWidth: number,
+    chartHeight: number,
+    minGen: number,
+    maxGen: number,
+    minFit: number,
+    maxFit: number
+  ): void;
+
+  drawDeliveryPoints(
+    ctx: CanvasRenderingContext2D,
+    padding: number,
+    chartWidth: number,
+    chartHeight: number,
+    minGen: number,
+    maxGen: number,
+    minFit: number,
+    maxFit: number
+  ): void;
+
+  drawTotalDeliveryLine(
+    ctx: CanvasRenderingContext2D,
+    padding: number,
+    chartWidth: number,
+    chartHeight: number,
+    minGen: number,
+    maxGen: number
+  ): void;
+}
+
+// implementação tipada (cole no seu .ts)
+const ChartManagerImpl: ChartManagerInterface = {
   fitnessHistory: [],
   maxHistory: 100,
   storageKey: "cooperacao_fitness_history",
@@ -6,16 +77,19 @@ const ChartManagerImpl = {
   ctx: null,
 
   init(): boolean {
-    this.canvas = document.getElementById("fitnessChart");
+    this.canvas = document.getElementById(
+      "fitnessChart"
+    ) as HTMLCanvasElement | null;
     if (!this.canvas) return false;
 
     this.ctx = this.canvas.getContext("2d");
-    this.loadFromStorage();
+    this.loadFromStorage?.();
     this.setupCanvas();
     return true;
   },
 
   setupCanvas(): void {
+    if (!this.canvas) return;
     this.canvas.width = 400;
     this.canvas.height = 200;
     this.canvas.style.border = "1px solid #444";
@@ -40,18 +114,16 @@ const ChartManagerImpl = {
       this.fitnessHistory.shift();
     }
 
-    this.saveToStorage();
     this.draw();
   },
 
   draw(): void {
-    if (!this.ctx || this.fitnessHistory.length < 1) return;
+    if (!this.ctx || !this.canvas || this.fitnessHistory.length < 1) return;
 
     const ctx = this.ctx;
     const width = this.canvas.width;
     const height = this.canvas.height;
 
-    // Limpa canvas
     ctx.clearRect(0, 0, width, height);
 
     if (this.fitnessHistory.length === 0) {
@@ -62,14 +134,12 @@ const ChartManagerImpl = {
       return;
     }
 
-    // Calcula limites dos dados
     const minGen = Math.min(...this.fitnessHistory.map((p) => p.generation));
     const maxGen = Math.max(...this.fitnessHistory.map((p) => p.generation));
     const minFit = Math.min(...this.fitnessHistory.map((p) => p.fitness));
     const maxFit = Math.max(...this.fitnessHistory.map((p) => p.fitness));
 
-    // Adiciona margem nos valores para melhor visualização
-    const fitRange = maxFit - minFit;
+    const fitRange = maxFit - minFit || 1;
     const adjustedMinFit = minFit - fitRange * 0.1;
     const adjustedMaxFit = maxFit + fitRange * 0.1;
 
@@ -77,7 +147,6 @@ const ChartManagerImpl = {
     const chartWidth = width - 2 * padding;
     const chartHeight = height - 2 * padding;
 
-    // Desenha eixos
     this.drawAxes(
       ctx,
       padding,
@@ -89,7 +158,6 @@ const ChartManagerImpl = {
       adjustedMaxFit
     );
 
-    // Desenha linha do fitness
     this.drawFitnessLine(
       ctx,
       padding,
@@ -101,7 +169,6 @@ const ChartManagerImpl = {
       adjustedMaxFit
     );
 
-    // Desenha pontos de entrega
     this.drawDeliveryPoints(
       ctx,
       padding,
@@ -113,7 +180,6 @@ const ChartManagerImpl = {
       adjustedMaxFit
     );
 
-    // Desenha linha do total de entregas
     this.drawTotalDeliveryLine(
       ctx,
       padding,
@@ -139,19 +205,16 @@ const ChartManagerImpl = {
     ctx.font = "10px monospace";
     ctx.fillStyle = "#ccc";
 
-    // Eixo X
     ctx.beginPath();
     ctx.moveTo(padding, height - padding);
     ctx.lineTo(width - padding, height - padding);
     ctx.stroke();
 
-    // Eixo Y
     ctx.beginPath();
     ctx.moveTo(padding, padding);
     ctx.lineTo(padding, height - padding);
     ctx.stroke();
 
-    // Labels
     ctx.textAlign = "center";
     ctx.fillText(`Gen ${minGen}`, padding, height - 10);
     ctx.fillText(`Gen ${maxGen}`, width - padding, height - 10);
@@ -173,19 +236,20 @@ const ChartManagerImpl = {
   ): void {
     if (this.fitnessHistory.length < 2) return;
 
+    const genRange = maxGen - minGen || 1;
+    const fitRange = maxFit - minFit || 1;
+
     ctx.strokeStyle = "#58a6ff";
     ctx.lineWidth = 2;
     ctx.beginPath();
 
     for (let i = 0; i < this.fitnessHistory.length; i++) {
       const point = this.fitnessHistory[i];
-      const x =
-        padding +
-        ((point.generation - minGen) / (maxGen - minGen)) * chartWidth;
+      const x = padding + ((point.generation - minGen) / genRange) * chartWidth;
       const y =
         padding +
         chartHeight -
-        ((point.fitness - minFit) / (maxFit - minFit)) * chartHeight;
+        ((point.fitness - minFit) / fitRange) * chartHeight;
 
       if (i === 0) {
         ctx.moveTo(x, y);
@@ -207,17 +271,21 @@ const ChartManagerImpl = {
     minFit: number,
     maxFit: number
   ): void {
+    if (this.fitnessHistory.length === 0) return;
+
+    const genRange = maxGen - minGen || 1;
+    const fitRange = maxFit - minFit || 1;
+
     ctx.fillStyle = "#2fd28f";
 
     for (const point of this.fitnessHistory) {
       if (point.delivered > 0) {
         const x =
-          padding +
-          ((point.generation - minGen) / (maxGen - minGen)) * chartWidth;
+          padding + ((point.generation - minGen) / genRange) * chartWidth;
         const y =
           padding +
           chartHeight -
-          ((point.fitness - minFit) / (maxFit - minFit)) * chartHeight;
+          ((point.fitness - minFit) / fitRange) * chartHeight;
 
         ctx.beginPath();
         ctx.arc(x, y, 3, 0, Math.PI * 2);
@@ -236,7 +304,9 @@ const ChartManagerImpl = {
   ): void {
     if (this.fitnessHistory.length < 2) return;
 
-    const maxTotal = Math.max(...this.fitnessHistory.map(p => p.totalDelivered || 0));
+    const maxTotal = Math.max(
+      ...this.fitnessHistory.map((p) => p.totalDelivered || 0)
+    );
     if (maxTotal === 0) return;
 
     ctx.strokeStyle = "#ff6b35";
@@ -244,10 +314,15 @@ const ChartManagerImpl = {
     ctx.setLineDash([3, 3]);
     ctx.beginPath();
 
+    const genRange = maxGen - minGen || 1;
+
     for (let i = 0; i < this.fitnessHistory.length; i++) {
       const point = this.fitnessHistory[i];
-      const x = padding + ((point.generation - minGen) / (maxGen - minGen)) * chartWidth;
-      const y = padding + chartHeight - ((point.totalDelivered || 0) / maxTotal) * (chartHeight * 0.3);
+      const x = padding + ((point.generation - minGen) / genRange) * chartWidth;
+      const y =
+        padding +
+        chartHeight -
+        ((point.totalDelivered || 0) / maxTotal) * (chartHeight * 0.3);
 
       if (i === 0) {
         ctx.moveTo(x, y);
@@ -259,42 +334,10 @@ const ChartManagerImpl = {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Label para total
     ctx.fillStyle = "#ff6b35";
     ctx.font = "9px monospace";
     ctx.textAlign = "left";
     ctx.fillText(`Total: ${maxTotal}`, padding + 5, padding + 15);
-  },
-
-  saveToStorage(): void {
-    try {
-      localStorage.setItem(
-        this.storageKey,
-        JSON.stringify(this.fitnessHistory)
-      );
-    } catch (e) {
-      console.warn("Erro ao salvar histórico de fitness:", e);
-    }
-  },
-
-  loadFromStorage(): void {
-    try {
-      const stored = localStorage.getItem(this.storageKey);
-      if (stored) {
-        this.fitnessHistory = JSON.parse(stored);
-      }
-    } catch (e) {
-      console.warn("Erro ao carregar histórico de fitness:", e);
-      this.fitnessHistory = [];
-    }
-  },
-
-  clearHistory(): void {
-    this.fitnessHistory = [];
-    localStorage.removeItem(this.storageKey);
-    if (this.ctx) {
-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    }
   },
 };
 

@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as http from "http";
 import * as path from "path";
 
-const PORT = process.env.PORT || 3005;
+const PORT = process.env.PORT || 3000;
 
 const mimeTypes: Record<string, string> = {
   ".html": "text/html",

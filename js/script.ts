@@ -108,13 +108,7 @@
   let rng: RNG = new RNG(SEED);
   let SIM: Simulation | null = null;
 
-  const {
-    clamp,
-    distance: dist,
-    pointInRect,
-    rectCircleOverlap,
-    rayCircleIntersectT,
-  } = GeometryUtils;
+  const { clamp, distance: dist, pointInRect } = GeometryUtils;
 
   class World {
     w: number;
@@ -609,18 +603,20 @@
         Agent,
         Genome
       );
-      
+
       // Calcula total de entregas da população
-      const totalDelivered = this.population.reduce((sum, agent) => sum + agent.delivered, 0);
-      
+      const totalDelivered = this.population.reduce(
+        (sum, agent) => sum + agent.delivered,
+        0
+      );
+
       this.population = evolutionResult.population;
       this.bestFitness = Math.round(evolutionResult.bestFitness * 100) / 100;
       this.bestDelivered = evolutionResult.bestDelivered;
       this.generation++;
       this.regenStones(this.population.length + 2);
       this.genStepCount = 0;
-      this.saveToStorage();
-      
+
       ChartManager.addFitnessPoint(
         this.generation,
         this.bestFitness,
@@ -647,64 +643,6 @@
       this.sanityFailed = !!fail;
       if (this.sanityFailed) Renderer.drawRedText(this.ctx, fail);
       return !this.sanityFailed;
-    }
-
-    saveToStorage() {
-      try {
-        const saveData = {
-          generation: this.generation,
-          bestFitness: this.bestFitness,
-          bestDelivered: this.bestDelivered,
-          population: this.population.map((agent) => ({
-            genome: agent.genome.serialize(),
-            fitness: agent.fitness,
-            delivered: agent.delivered,
-          })),
-          geneticState: GeneticSystem.state,
-          timestamp: Date.now(),
-        };
-        localStorage.setItem(this.storageKey, JSON.stringify(saveData));
-      } catch (e) {
-        console.warn("Erro ao salvar simulação:", e);
-      }
-    }
-
-    loadFromStorage() {
-      try {
-        const saved = localStorage.getItem(this.storageKey);
-        if (!saved) return false;
-        const data = JSON.parse(saved);
-        this.generation = data.generation || 0;
-        this.bestFitness = data.bestFitness || 0;
-        this.bestDelivered = data.bestDelivered || 0;
-        if (data.population && data.population.length > 0) {
-          this.population = data.population.map((agentData) => {
-            const genome = Genome.deserialize(agentData.genome);
-            const agent = new Agent(
-              this.world.base.x + this.world.base.r + 6 + rng.float(-6, 6),
-              this.world.base.y + rng.float(-6, 6),
-              rng.float(0, Math.PI * 2),
-              genome
-            );
-            agent.fitness = agentData.fitness || 0;
-            agent.delivered = agentData.delivered || 0;
-            return agent;
-          });
-        }
-        if (data.geneticState)
-          GeneticSystem.state = {
-            ...GeneticSystem.state,
-            ...data.geneticState,
-          };
-        return true;
-      } catch (e) {
-        console.warn("Erro ao carregar simulação:", e);
-        return false;
-      }
-    }
-
-    clearStorage() {
-      localStorage.removeItem(this.storageKey);
     }
   }
 
@@ -743,9 +681,7 @@
       SIM.genSeconds = CONFIG.SIMULATION.GEN_SECONDS;
       SIM.stepsPerGen = CONFIG.SIMULATION.STEPS_PER_GEN;
       SIM.speed = CONFIG.SIMULATION.SPEED;
-      SIM.clearStorage();
       SIM.initWorld();
-      ChartManager.clearHistory();
       DOMManager.updateUI(SIM);
     });
 

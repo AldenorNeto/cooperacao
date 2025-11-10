@@ -1,10 +1,78 @@
-const GeneticSystemImpl = {
+interface GeneticSystemInterface {
+  CONFIG: Config;
+  state: GeneticSystemState;
+
+  // API principal
+  evolvePopulation(
+    population: Agent[],
+    world: World,
+    rng: RNG,
+    AgentClass: AgentConstructor,
+    GenomeClass: GenomeConstructor
+  ): EvolutionResult;
+
+  getStats(): {
+    stagnationCount: number;
+    adaptiveSigma: string;
+    diversity: string;
+    isStagnant: boolean;
+  };
+
+  _rankAndEvaluate(population: Agent[], world: World): Agent[];
+
+  _selectParent(parentPool: Agent[], rng: RNG): Agent;
+
+  _crossover(
+    parent1: Agent,
+    parent2: Agent,
+    world: World,
+    rng: RNG,
+    AgentClass: AgentConstructor,
+    GenomeClass: GenomeConstructor
+  ): Agent;
+
+  _mutateAgent(
+    parent: Agent,
+    world: World,
+    rng: RNG,
+    AgentClass: AgentConstructor
+  ): Agent;
+
+  _cloneAgent(
+    parent: Agent,
+    world: World,
+    rng: RNG,
+    AgentClass: AgentConstructor
+  ): Agent;
+
+  _createRandomAgent(
+    world: World,
+    rng: RNG,
+    AgentClass: AgentConstructor,
+    GenomeClass: GenomeConstructor
+  ): Agent;
+
+  _createAgentFromGenome(
+    genome: Genome,
+    world: World,
+    rng: RNG,
+    AgentClass: AgentConstructor
+  ): Agent;
+
+  _calculateDiversity(population: Agent[]): number;
+
+  _genomicDistance(genome1: Genome, genome2: Genome): number;
+
+  _updateSystemState(currentBestFitness: number): void;
+}
+
+const GeneticSystemImpl: GeneticSystemInterface = {
   // Configurações do sistema genético
   CONFIG: {
-    ELITE_PERCENTAGE: 0.20, // 20% dos melhores são preservados
+    ELITE_PERCENTAGE: 0.2, // 20% dos melhores são preservados
     CROSSOVER_PERCENTAGE: 0.55, // 55% da nova população vem de cruzamento
     MUTATION_PERCENTAGE: 0.25, // 25% são mutações puras
-    RANDOM_PERCENTAGE: 0.00, // 0% são completamente aleatórios
+    RANDOM_PERCENTAGE: 0.0, // 0% são completamente aleatórios
 
     CROSSOVER_RATE: 0.7, // Probabilidade de cruzamento vs clonagem
     MUTATION_STRENGTH_MIN: 0.08, // Mutação mínima (aumentada)
@@ -366,5 +434,7 @@ const GeneticSystemImpl = {
 
 // Exporta para uso global
 if (typeof window !== "undefined") {
-  (window as any).GeneticSystem = GeneticSystemImpl;
+  (
+    window as unknown as Window & { GeneticSystem: GeneticSystemInterface }
+  ).GeneticSystem = GeneticSystemImpl;
 }

@@ -1,14 +1,12 @@
 const RendererImpl = {
-  draw(world: World, population: Agent[], sim: any): void {
+  draw(world: World, population: Agent[], sim: Simulation): void {
     const ctx = sim.ctx;
     ctx.clearRect(0, 0, sim.canvas.width, sim.canvas.height);
 
     this.drawEnvironment(ctx, world);
-    this.drawAgents(ctx, population, sim, world);
+    this.drawAgents(ctx, population);
     this.drawUI(ctx, sim);
   },
-
-
 
   drawEnvironment(ctx: CanvasRenderingContext2D, world: World): void {
     // Obstáculos
@@ -44,11 +42,7 @@ const RendererImpl = {
   drawAgents(
     ctx: CanvasRenderingContext2D,
     population: Agent[],
-    sim: any,
-    world: World
   ): void {
-    console.log(`DrawAgents: ${population.length} agentes`);
-
     // Agentes
     for (const a of population) {
       ctx.save();
@@ -83,7 +77,7 @@ const RendererImpl = {
     }
   },
 
-  drawUI(ctx: CanvasRenderingContext2D, sim: any): void {
+  drawUI(ctx: CanvasRenderingContext2D, sim: Simulation): void {
     ctx.save();
     ctx.fillStyle = "rgba(2,6,10,0.35)";
     ctx.fillRect(8, 8, 340, 96);
@@ -101,8 +95,6 @@ const RendererImpl = {
   drawSensors(
     ctx: CanvasRenderingContext2D,
     agent: Agent,
-    genome: Genome,
-    world: World
   ): void {
     if (agent.sensorData) {
       SensorSystem.drawSensors(ctx, agent, agent.sensorData);

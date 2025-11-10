@@ -1,6 +1,3 @@
-// Definições de Tipos - Cooperação de Agentes
-// Tipagem TypeScript para melhor desenvolvimento
-
 interface Point {
   x: number;
   y: number;
@@ -32,14 +29,9 @@ interface Agent extends Point {
   carry: boolean;
   mineTimer: number;
   depositTimer: number;
-  memory: { 
-    angle: number; 
+  memory: {
+    angle: number;
     dist: number;
-    successfulPaths?: any[];
-    lastSuccessfulAction?: any;
-    lastPickupPosition?: Point;
-    lastDeliveryCount?: number;
-    lastSuccessfulReturnPath?: Point[];
   };
   delivered: number;
   deliveries: number;
@@ -54,7 +46,7 @@ interface Agent extends Point {
   sensorData?: SensorData[];
   correctMineAttempts?: number;
   wrongMineAttempts?: number;
-  detailedScore?: any;
+  detailedScore?: MultiObjectiveMetrics;
   hasLeftBase: boolean;
   record(): void;
 }
@@ -78,24 +70,28 @@ interface Genome {
   outputWeights: Float32Array;
   outputBiases: Float32Array;
   clone(): Genome;
-  mutate(rng: any, sigma: number): Genome;
+  mutate(rng: RNG, sigma: number): Genome;
   feed(inputs: number[]): number[];
   serialize(): string;
+}
+
+interface StoneHit {
+  distance: number;
+  stone: Stone | null;
+  signal: number;
+}
+
+interface BaseHit {
+  distance: number;
+  signal: number;
 }
 
 interface SensorData {
   angle: number;
   range: number;
   obstacleDistance: number;
-  stoneHit: {
-    distance: number;
-    stone: Stone | null;
-    signal: number;
-  };
-  baseHit: {
-    distance: number;
-    signal: number;
-  };
+  stoneHit: StoneHit;
+  baseHit: BaseHit;
   endDistance: number;
   proximity: number;
   stoneSignal: number;
@@ -115,62 +111,20 @@ interface StepResult extends ActionResult {
 }
 
 interface Config {
-  DEFAULTS: {
-    popSizeLambda: number;
-    sigma: number;
-    genSeconds: number;
-    stepsPerGen: number;
-    speed: number;
-  };
-  AGENT: {
-    TRAIL_LENGTH: number;
-    SENSOR_COUNT: number;
-    BASE_RADIUS: number;
-    MINE_TIMER_BASE: number;
-    DEPOSIT_TIMER_BASE: number;
-  };
-  PHYSICS: {
-    MAX_SPEED: number;
-    VELOCITY_DECAY: number;
-    ACCELERATION_FACTOR: number;
-    ROTATION_FACTOR: number;
-    COLLISION_VELOCITY_FACTOR: number;
-    COLLISION_PUSH_DISTANCE: number;
-    BOUNDARY_MARGIN: number;
-  };
+  ELITE_PERCENTAGE: number;
+  CROSSOVER_PERCENTAGE: number;
+  MUTATION_PERCENTAGE: number;
+  RANDOM_PERCENTAGE: number;
 
-  SIMULATION: {
-    MAX_POPULATION: number;
-    MIN_POPULATION: number;
-    STORAGE_KEY: string;
-    STEPS_PER_SECOND: number;
-    MIN_STEPS_PER_GEN: number;
-    TURBO_SPEED_MULTIPLIER: number;
-    MAX_TURBO_ITERATIONS: number;
-  };
-  GENOME: {
-    INPUTS: number;
-    HIDDEN: number;
-    OUTPUTS: number;
-    SENSOR_ANGLE_BASE: number;
-    SENSOR_ANGLE_VARIATION: number;
-    SENSOR_RANGE_MIN: number;
-    SENSOR_RANGE_MAX: number;
-    WEIGHT_INIT_STD: number;
-    BIAS_INIT_STD: number;
-    MUTATION_SIGMA_FACTOR: number;
-    MUTATION_RANGE_FACTOR: number;
-    MIN_SENSOR_RANGE: number;
-  };
-  ACTIONS: {
-    MINE_THRESHOLD: number;
-    DEPOSIT_DISTANCE: number;
-    STONE_PICKUP_DISTANCE: number;
-    RANDOM_ROTATION: number;
-  };
+  CROSSOVER_RATE: number;
+  MUTATION_STRENGTH_MIN: number;
+  MUTATION_STRENGTH_MAX: number;
+
+  DIVERSITY_THRESHOLD: number;
+  STAGNATION_GENERATIONS: number;
 }
 
-// Sistemas Globais
+// ----- Utilities / Global systems -----
 declare const GeometryUtils: {
   clamp(v: number, a: number, b: number): number;
   distance(x1: number, y1: number, x2: number, y2: number): number;
@@ -197,47 +151,13 @@ declare const SensorSystem: {
   ): void;
 };
 
-declare const RewardSystem: RewardSystemInterface;
-
-declare const GeneticSystem: GeneticSystemInterface;
-
-declare const MapGenerator: {
-  generateBase(w: number, h: number, rng: any): Base;
-  generateObstacles(w: number, h: number, base: Base, rng: any): Rect[];
-  generateStones(
-    w: number,
-    h: number,
-    base: Base,
-    obstacles: Rect[],
-    minTotalQuantity: number,
-    rng: any
-  ): Stone[];
-};
-
-declare const Renderer: {
-  draw(world: World, population: Agent[], sim: any): void;
-  drawRedText(ctx: CanvasRenderingContext2D, msg: string): void;
-};
-
-declare const DOMManager: {
-  init(): any;
-  resizeCanvas(): void;
-  updateUI(sim: any): void;
-  setupInputs(sim: any): void;
-};
-
-declare const ChartManager: {
-  init(): void;
-  addFitnessPoint(generation: number, fitness: number, delivered: number, totalDelivered?: number): void;
-  clearHistory(): void;
-};
-
+// ----- MemorySystem (declarado globalmente) -----
 declare const MemorySystem: {
   recordSuccessfulBehavior(agent: Agent, world: World): void;
   calculateMemoryBonus(agent: Agent, world: World): number;
 };
 
-// Interfaces abstratas para sistemas
+// ----- RNG / Constructors -----
 interface RNG {
   int(max: number): number;
   rand(): number;
@@ -253,6 +173,7 @@ interface GenomeConstructor {
   new (rng: RNG): Genome;
 }
 
+// ----- Population / multi-obj -----
 interface PopulationStats {
   avgWrongMines: number;
   avgExperience: number;
@@ -266,6 +187,7 @@ interface MultiObjectiveMetrics {
   rawFitness?: number;
 }
 
+// ----- Evolution result / genetic state -----
 interface EvolutionResult {
   population: Agent[];
   champion: Genome;
@@ -280,6 +202,7 @@ interface GeneticSystemState {
   adaptiveSigma: number;
 }
 
+// ----- RewardSystem public interface -----
 interface RewardSystemInterface {
   updatePopulationStats(agents: Agent[]): void;
   calculateAdaptivePenalty(agent: Agent, penaltyType: string): number;
@@ -291,14 +214,18 @@ interface RewardSystemInterface {
   calculateReturnToBaseBonus(agent: Agent, world: World): number;
   calculateProximityBonus(agent: Agent, world: World): number;
   calculateCollisionPenalty(collisionType: "boundary" | "obstacle"): number;
+  calculateImmobilityPenalty(agent: Agent): number;
   calculateTotalFitness(
     agent: Agent,
     actionInfo: ActionResult,
     world: World
   ): number;
   evaluatePopulation(agents: Agent[], world: World): Agent[];
+  updateReward(rewardName: string, newValue: number): boolean;
+  getRewardConfig(): RewardConfig;
 }
 
+// ----- GeneticSystem public interface -----
 interface GeneticSystemInterface {
   evolvePopulation(
     population: Agent[],
@@ -316,11 +243,391 @@ interface GeneticSystemInterface {
   state: GeneticSystemState;
 }
 
-declare const CONFIG: Config;
+// ----- ChartManager -----
+interface FitnessPoint {
+  generation: number;
+  fitness: number;
+  delivered: number;
+  totalDelivered?: number;
+  timestamp: number;
+}
 
-// Extensão da interface Window para incluir SIM
+interface ChartManagerInterface {
+  fitnessHistory: FitnessPoint[];
+  maxHistory: number;
+  storageKey: string;
+  canvas: HTMLCanvasElement | null;
+  ctx: CanvasRenderingContext2D | null;
+
+  init(): boolean;
+  loadFromStorage?(): void;
+  saveToStorage?(): void;
+  addFitnessPoint(
+    generation: number,
+    fitness: number,
+    delivered: number,
+    totalDelivered?: number
+  ): void;
+  draw(): void;
+  drawAxes(
+    ctx: CanvasRenderingContext2D,
+    padding: number,
+    width: number,
+    height: number,
+    minGen: number,
+    maxGen: number,
+    minFit: number,
+    maxFit: number
+  ): void;
+  drawFitnessLine(
+    ctx: CanvasRenderingContext2D,
+    padding: number,
+    chartWidth: number,
+    chartHeight: number,
+    minGen: number,
+    maxGen: number,
+    minFit: number,
+    maxFit: number
+  ): void;
+  drawDeliveryPoints(
+    ctx: CanvasRenderingContext2D,
+    padding: number,
+    chartWidth: number,
+    chartHeight: number,
+    minGen: number,
+    maxGen: number,
+    minFit: number,
+    maxFit: number
+  ): void;
+  drawTotalDeliveryLine(
+    ctx: CanvasRenderingContext2D,
+    padding: number,
+    chartWidth: number,
+    chartHeight: number,
+    minGen: number,
+    maxGen: number
+  ): void;
+}
+
+// ----- DOMManager -----
+interface DOMButtons {
+  start: HTMLElement | null;
+  reset: HTMLElement | null;
+  save: HTMLElement | null;
+  load: HTMLElement | null;
+}
+
+interface ConfigDisplayElements {
+  pop: HTMLElement | null;
+  sigma: HTMLElement | null;
+  genTime: HTMLElement | null;
+  speed: HTMLElement | null;
+}
+
+interface LabelElements {
+  best: HTMLElement | null;
+  bestdel: HTMLElement | null;
+  popSize: HTMLElement | null;
+}
+
+interface OtherElements {
+  champJson: HTMLElement | null;
+  champInfo: HTMLElement | null;
+  debugBox: HTMLElement | null;
+}
+
+interface DOMElements {
+  canvas: HTMLCanvasElement | null;
+  buttons: DOMButtons;
+  configDisplay: ConfigDisplayElements;
+  labels: LabelElements;
+  other: OtherElements;
+}
+
+/**
+ * Tipagem enxuta da Simulation usada por UI/DOMManager.
+ * Centralize aqui todos os campos que o DOM / Chart / Renderer usam.
+ */
+interface SimulationView {
+  // properties commonly used by UI / DOMManager / ChartManager / Renderer
+  canvas?: HTMLCanvasElement;
+  ctx?: CanvasRenderingContext2D;
+  phy_dt?: number;
+  genSeconds?: number;
+  stepsPerGen?: number;
+  speed?: number;
+  lambda?: number;
+  sigma?: number;
+  world?: World;
+  generation: number;
+  running?: boolean;
+  showSensors?: boolean;
+  showTrails?: boolean;
+  debug?: boolean;
+  population: Agent[];
+  maxPopulation?: number;
+  minPopulation?: number;
+  genStepCount: number;
+  bestFitness: number;
+  bestDelivered: number;
+  sanityFailed?: boolean;
+  storageKey?: string;
+  // methods that DOMManager/others may call
+  initWorld?(): void;
+  endGeneration?(): void;
+  regenStones?(minTotalQuantity: number): void;
+  stepAll?(): void;
+  sanityCheck?(): boolean;
+}
+
+interface DOMManagerInterface {
+  elements: DOMElements | null;
+
+  init(): DOMElements | null;
+  resizeCanvas(): void;
+  updateUI(sim: SimulationView): void;
+  setupInputs?(sim?: SimulationView): void;
+
+  drawRedText(ctx: CanvasRenderingContext2D, msg: string): void;
+  drawUI(ctx: CanvasRenderingContext2D, sim: SimulationView): void;
+  drawEnvironment(ctx: CanvasRenderingContext2D, world: World): void;
+  drawAgents(
+    ctx: CanvasRenderingContext2D,
+    pop: Agent[],
+    sim: SimulationView,
+    world: World
+  ): void;
+}
+
+// ----- Simulation (completa o suficiente para tipagem) -----
+interface Simulation {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  phy_dt: number;
+  genSeconds: number;
+  stepsPerGen: number;
+  speed: number;
+  lambda: number;
+  sigma: number;
+  world: World;
+  generation: number;
+  running: boolean;
+  showSensors: boolean;
+  showTrails: boolean;
+  debug: boolean;
+  population: Agent[];
+  maxPopulation: number;
+  minPopulation: number;
+  genStepCount: number;
+  bestFitness: number;
+  bestDelivered: number;
+  sanityFailed: boolean;
+  storageKey: string;
+
+  // principais métodos públicos usados pelo app
+  constructor(
+    canvas: HTMLCanvasElement,
+    ctx: CanvasRenderingContext2D
+  ): Simulation;
+  stepAgent(
+    agent: Agent,
+    genome: Genome,
+    world: World,
+    maxSpeed: number
+  ): StepResult;
+  stepAll(): void;
+  initWorld(): void;
+  regenStones(minTotalQuantity: number): void;
+  buildPopulation(): void;
+  endGeneration(): void;
+  sanityCheck(): boolean;
+}
+
+// ----- MapGenerator / Renderer globals -----
+declare const MapGenerator: {
+  generateBase(w: number, h: number, rng: RNG): Base;
+  generateObstacles(w: number, h: number, base: Base, rng: RNG): Rect[];
+  generateStones(
+    w: number,
+    h: number,
+    base: Base,
+    obstacles: Rect[],
+    minTotalQuantity: number,
+    rng: RNG
+  ): Stone[];
+};
+
+declare const Renderer: {
+  draw(
+    world: World,
+    population: Agent[],
+    sim: SimulationView | Simulation
+  ): void;
+  drawRedText(ctx: CanvasRenderingContext2D, msg: string): void;
+};
+
+// ----- Config global -----
+declare const CONFIG: {
+  POPULATION: { LAMBDA: number; MIN_SIZE: number; MAX_SIZE: number };
+  GENETIC: { SIGMA: number };
+  SIMULATION: {
+    GEN_SECONDS: number;
+    STEPS_PER_GEN: number;
+    SPEED: number;
+    STEPS_PER_SECOND: number;
+    MIN_STEPS_PER_GEN: number;
+    TURBO_SPEED_MULTIPLIER: number;
+    MAX_TURBO_ITERATIONS: number;
+    MAX_POPULATION: number;
+    MIN_POPULATION: number;
+    STORAGE_KEY: string;
+  };
+  AGENT: {
+    TRAIL_LENGTH: number;
+    SENSOR_COUNT: number;
+    BASE_RADIUS: number;
+    MINE_TIMER_BASE: number;
+    DEPOSIT_TIMER_BASE: number;
+  };
+  PHYSICS: {
+    MAX_SPEED: number;
+    VELOCITY_DECAY: number;
+    ACCELERATION_FACTOR: number;
+    ROTATION_FACTOR: number;
+    COLLISION_VELOCITY_FACTOR: number;
+    COLLISION_PUSH_DISTANCE: number;
+    BOUNDARY_MARGIN: number;
+  };
+  GENOME: {
+    INPUTS: number;
+    HIDDEN: number;
+    OUTPUTS: number;
+    SENSOR_ANGLE_BASE: number;
+    SENSOR_ANGLE_VARIATION: number;
+    SENSOR_RANGE_MIN: number;
+    SENSOR_RANGE_MAX: number;
+    WEIGHT_INIT_STD: number;
+    BIAS_INIT_STD: number;
+    MUTATION_SIGMA_FACTOR: number;
+    MUTATION_RANGE_FACTOR: number;
+    MIN_SENSOR_RANGE: number;
+  };
+  ACTIONS: {
+    MINE_THRESHOLD: number;
+    DEPOSIT_DISTANCE: number;
+    STONE_PICKUP_DISTANCE: number;
+    RANDOM_ROTATION: number;
+  };
+};
+
+// ----- Extensões globais da Window -----
 declare global {
   interface Window {
-    SIM: any;
+    DOMManager: DOMManagerInterface;
+    ChartManager: ChartManagerInterface;
+    RewardSystem: RewardSystemInterface;
+    GeneticSystem: GeneticSystemInterface;
+    MapGenerator: typeof MapGenerator;
+    GeometryUtils: typeof GeometryUtils;
+    Renderer: typeof Renderer;
+    MemorySystem: typeof MemorySystem;
+    SIM: Simulation | null;
+    CONFIG: typeof CONFIG;
   }
 }
+// declare global singletons (para o TS aceitar usar DOMManager, ChartManager, etc. como identificadores)
+declare const DOMManager: DOMManagerInterface;
+declare const ChartManager: ChartManagerInterface;
+declare const RewardSystem: RewardSystemInterface;
+declare const GeneticSystem: GeneticSystemInterface;
+declare const MapGenerator: {
+  generateBase(w: number, h: number, rng: RNG): Base;
+  generateObstacles(w: number, h: number, base: Base, rng: RNG): Rect[];
+  generateStones(
+    w: number,
+    h: number,
+    base: Base,
+    obstacles: Rect[],
+    minTotalQuantity: number,
+    rng: RNG
+  ): Stone[];
+};
+declare const Renderer: {
+  draw(
+    world: World,
+    population: Agent[],
+    sim: SimulationView | Simulation
+  ): void;
+  drawRedText(ctx: CanvasRenderingContext2D, msg: string): void;
+};
+declare const GeometryUtils: {
+  clamp(v: number, a: number, b: number): number;
+  distance(x1: number, y1: number, x2: number, y2: number): number;
+  pointInRect(x: number, y: number, rect: Rect): boolean;
+  rectCircleOverlap(rect: Rect, circle: Circle): boolean;
+  rayCircleIntersectT(
+    rx: number,
+    ry: number,
+    dx: number,
+    dy: number,
+    cx: number,
+    cy: number,
+    cr: number
+  ): number | null;
+};
+declare const MemorySystem: {
+  recordSuccessfulBehavior(agent: Agent, world: World): void;
+  calculateMemoryBonus(agent: Agent, world: World): number;
+};
+declare const CONFIG: {
+  POPULATION: { LAMBDA: number; MIN_SIZE: number; MAX_SIZE: number };
+  GENETIC: { SIGMA: number };
+  SIMULATION: {
+    GEN_SECONDS: number;
+    STEPS_PER_GEN: number;
+    SPEED: number;
+    STEPS_PER_SECOND: number;
+    MIN_STEPS_PER_GEN: number;
+    TURBO_SPEED_MULTIPLIER: number;
+    MAX_TURBO_ITERATIONS: number;
+    MAX_POPULATION: number;
+    MIN_POPULATION: number;
+    STORAGE_KEY: string;
+  };
+  AGENT: {
+    TRAIL_LENGTH: number;
+    SENSOR_COUNT: number;
+    BASE_RADIUS: number;
+    MINE_TIMER_BASE: number;
+    DEPOSIT_TIMER_BASE: number;
+  };
+  PHYSICS: {
+    MAX_SPEED: number;
+    VELOCITY_DECAY: number;
+    ACCELERATION_FACTOR: number;
+    ROTATION_FACTOR: number;
+    COLLISION_VELOCITY_FACTOR: number;
+    COLLISION_PUSH_DISTANCE: number;
+    BOUNDARY_MARGIN: number;
+  };
+  GENOME: {
+    INPUTS: number;
+    HIDDEN: number;
+    OUTPUTS: number;
+    SENSOR_ANGLE_BASE: number;
+    SENSOR_ANGLE_VARIATION: number;
+    SENSOR_RANGE_MIN: number;
+    SENSOR_RANGE_MAX: number;
+    WEIGHT_INIT_STD: number;
+    BIAS_INIT_STD: number;
+    MUTATION_SIGMA_FACTOR: number;
+    MUTATION_RANGE_FACTOR: number;
+    MIN_SENSOR_RANGE: number;
+  };
+  ACTIONS: {
+    MINE_THRESHOLD: number;
+    DEPOSIT_DISTANCE: number;
+    STONE_PICKUP_DISTANCE: number;
+    RANDOM_ROTATION: number;
+  };
+};

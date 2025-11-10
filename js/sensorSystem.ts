@@ -201,8 +201,8 @@ const SensorSystemImpl = {
 
   _updateAgentMemory(
     agent: Agent,
-    stoneHit: any,
-    baseHit: any,
+    stoneHit: StoneHit,
+    baseHit: BaseHit,
     world: World
   ): void {
     if (stoneHit.stone) {

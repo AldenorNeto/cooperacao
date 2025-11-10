@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -24,6 +24,7 @@
           <div class="small">Speed: <span id="configSpeed">5</span></div>
           <div class="small">Improvements: Memory + Enhanced Rewards</div>
         </div>
+
         <div style="height: 8px"></div>
 
         <div class="chart-section">
@@ -33,20 +34,27 @@
 
         <div style="height: 8px"></div>
 
-        <div style="height: 8px"></div>
         <div id="debugBox" class="monos"></div>
       </div>
     </div>
+
+    <!-- Núcleo / utilitários (devem carregar primeiro) -->
     <script src="js/utils.js"></script>
     <script src="js/sensorSystem.js"></script>
     <script src="js/memorySystem.js"></script>
+
+    <!-- Sistemas que expõem globals: RewardSystem, GeneticSystem, MapGenerator, GeometryUtils, Renderer -->
+    <!-- IMPORTANTE: esses arquivos devem atribuir aos globals, ex: window.RewardSystem = RewardSystemImpl -->
     <script src="js/rewardSystem.js"></script>
     <script src="js/geneticSystem.js"></script>
-
     <script src="js/mapGenerator.js"></script>
+    <script src="js/renderer.js"></script>
+
+    <!-- Managers (dependem dos sistemas acima) -->
     <script src="js/domManager.js"></script>
     <script src="js/chartManager.js"></script>
-    <script src="js/renderer.js"></script>
-    <script type="module" src="js/script.js" defer></script>
+
+    <!-- Script principal: roda por último e usa os globals -->
+    <script src="js/script.js"></script>
   </body>
 </html>

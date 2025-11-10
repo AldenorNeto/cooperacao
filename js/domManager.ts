@@ -1,13 +1,65 @@
-const DOMManagerImpl = {
-  // Elementos da UI
+// Tipos locais para DOMManager
+interface DOMButtons {
+  start: HTMLElement | null;
+  reset: HTMLElement | null;
+  save: HTMLElement | null;
+  load: HTMLElement | null;
+}
+
+interface ConfigDisplayElements {
+  pop: HTMLElement | null;
+  sigma: HTMLElement | null;
+  genTime: HTMLElement | null;
+  speed: HTMLElement | null;
+}
+
+interface LabelElements {
+  best: HTMLElement | null;
+  bestdel: HTMLElement | null;
+  popSize: HTMLElement | null;
+}
+
+interface OtherElements {
+  champJson: HTMLElement | null;
+  champInfo: HTMLElement | null;
+  debugBox: HTMLElement | null;
+}
+
+interface DOMElements {
+  canvas: HTMLCanvasElement | null;
+  buttons: DOMButtons;
+  configDisplay: ConfigDisplayElements;
+  labels: LabelElements;
+  other: OtherElements;
+}
+
+// Interface pública do manager
+interface DOMManagerInterface {
+  elements: DOMElements | null;
+
+  init(): DOMElements | null;
+  resizeCanvas(): void;
+  updateUI(sim: Simulation): void;
+  setupInputs?(): void;
+
+  drawRedText(ctx: CanvasRenderingContext2D, msg: string): void;
+  drawUI(ctx: CanvasRenderingContext2D, sim: Simulation): void;
+  drawEnvironment(ctx: CanvasRenderingContext2D, world: World): void;
+  drawAgents(
+    ctx: CanvasRenderingContext2D,
+    pop: Agent[],
+    sim: Simulation,
+    world: World
+  ): void;
+}
+
+// Implementação tipada
+const DOMManagerImpl: DOMManagerInterface = {
   elements: null,
 
-  /**
-   * Inicializa elementos do DOM
-   */
-  init(): any {
-    this.elements = {
-      canvas: document.getElementById("c"),
+  init(): DOMElements | null {
+    const elements: DOMElements = {
+      canvas: document.getElementById("c") as HTMLCanvasElement | null,
       buttons: {
         start: document.getElementById("btnStart"),
         reset: document.getElementById("btnReset"),
@@ -25,7 +77,6 @@ const DOMManagerImpl = {
         bestdel: document.getElementById("bestdel"),
         popSize: document.getElementById("popSizeLbl"),
       },
-
       other: {
         champJson: document.getElementById("champJson"),
         champInfo: document.getElementById("champInfo"),
@@ -33,42 +84,41 @@ const DOMManagerImpl = {
       },
     };
 
+    this.elements = elements;
     return this.elements;
   },
 
-  /**
-   * Redimensiona canvas
-   */
   resizeCanvas(): void {
-    const cvs = this.elements.canvas;
+    const cvs = this.elements?.canvas;
+    if (!cvs) return;
     const rect = cvs.getBoundingClientRect();
-    const ratio = devicePixelRatio || 1;
+    const ratio = window.devicePixelRatio || 1;
     cvs.width = Math.max(640, Math.floor((window.innerWidth - 420) * ratio));
     cvs.height = Math.max(420, Math.floor(window.innerHeight * ratio));
     cvs.style.width = window.innerWidth - 420 + "px";
     cvs.style.height = window.innerHeight + "px";
   },
 
-  /**
-   * Atualiza valores da UI
-   */
-  updateUI(sim: any): void {
+  updateUI(sim: Simulation): void {
     const e = this.elements;
+    if (!e) return;
 
-    e.configDisplay.pop.innerText = String(1 + sim.lambda);
-    e.configDisplay.sigma.innerText = sim.sigma.toFixed(2);
-    e.configDisplay.genTime.innerText = sim.genSeconds;
-    e.configDisplay.speed.innerText = sim.speed;
+    if (e.configDisplay.pop)
+      e.configDisplay.pop.innerText = String(1 + (sim.lambda ?? 0));
+    if (e.configDisplay.sigma)
+      e.configDisplay.sigma.innerText =
+        (sim.sigma ?? 0).toFixed?.(2) ?? String(sim.sigma ?? 0);
+    if (e.configDisplay.genTime)
+      e.configDisplay.genTime.innerText = String(sim.genSeconds ?? "");
+    if (e.configDisplay.speed)
+      e.configDisplay.speed.innerText = String(sim.speed ?? "");
   },
 
-  /**
-   * Configura inputs iniciais
-   */
+  setupInputs(): void {
+    const e = this.elements;
+    if (!e) return;
+  },
 
-
-  /**
-   * Desenha texto de erro
-   */
   drawRedText(ctx: CanvasRenderingContext2D, msg: string): void {
     ctx.save();
     ctx.fillStyle = "rgba(200,30,30,0.95)";
@@ -79,10 +129,7 @@ const DOMManagerImpl = {
     ctx.restore();
   },
 
-  /**
-   * Desenha UI principal
-   */
-  drawUI(ctx: CanvasRenderingContext2D, sim: any): void {
+  drawUI(ctx: CanvasRenderingContext2D, sim: Simulation): void {
     ctx.save();
     ctx.fillStyle = "rgba(2,6,10,0.35)";
     ctx.fillRect(8, 8, 340, 96);
@@ -93,26 +140,16 @@ const DOMManagerImpl = {
     ctx.fillText(`Best fit: ${sim.bestFitness}`, 14, 44);
     ctx.fillText(`Delivered: ${sim.bestDelivered}`, 14, 62);
     ctx.fillText(`Steps: ${sim.genStepCount}/${sim.stepsPerGen}`, 14, 80);
-    ctx.fillText(`Pop: ${sim.population.length}`, 200, 80);
+    ctx.fillText(`Pop: ${sim.population?.length ?? 0}`, 200, 80);
     ctx.restore();
   },
 
-  /**
-   * Desenha feromônios
-   */
-
-
-  /**
-   * Desenha ambiente (obstáculos, pedras, base)
-   */
   drawEnvironment(ctx: CanvasRenderingContext2D, world: World): void {
-    // Obstáculos
     ctx.fillStyle = "#2b2f37";
     for (const ob of world.obstacles) {
       ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
     }
 
-    // Pedras
     for (const s of world.stones) {
       ctx.beginPath();
       ctx.fillStyle = s.quantity > 0 ? "#a9a089" : "#444";
@@ -127,7 +164,6 @@ const DOMManagerImpl = {
       ctx.fillText(s.quantity.toString(), s.x, s.y);
     }
 
-    // Base
     ctx.beginPath();
     ctx.fillStyle = "#fff1a8";
     ctx.strokeStyle = "#d9b24a";
@@ -136,16 +172,12 @@ const DOMManagerImpl = {
     ctx.stroke();
   },
 
-  /**
-   * Desenha agentes
-   */
   drawAgents(
     ctx: CanvasRenderingContext2D,
     pop: Agent[],
-    sim: any,
+    sim: Simulation,
     world: World
   ): void {
-    // Rastros
     if (sim.showTrails) {
       ctx.lineWidth = 1;
       for (const a of pop) {
@@ -161,10 +193,7 @@ const DOMManagerImpl = {
       }
     }
 
-    // Agentes
     for (const a of pop) {
-      if (sim.showSensors) this.drawSensors(ctx, a, a.genome, world);
-
       ctx.save();
       ctx.translate(a.x, a.y);
       ctx.rotate(a.a);
@@ -187,7 +216,6 @@ const DOMManagerImpl = {
       ctx.restore();
     }
 
-    // Destaca campeão
     if (pop[0]) {
       ctx.beginPath();
       ctx.strokeStyle = "#ffffff";
@@ -196,22 +224,10 @@ const DOMManagerImpl = {
       ctx.stroke();
     }
   },
-
-  /**
-   * Desenha sensores
-   */
-  drawSensors(
-    ctx: CanvasRenderingContext2D,
-    agent: Agent,
-    genome: Genome,
-    world: World
-  ): void {
-    // Implementação dos sensores (copiada do código original)
-    // ... (código dos sensores permanece igual)
-  },
 };
 
-// Exporta para uso global
+// ligação tipada ao window
 if (typeof window !== "undefined") {
   (window as any).DOMManager = DOMManagerImpl;
 }
+
