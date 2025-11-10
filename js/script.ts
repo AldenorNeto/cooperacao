@@ -6,12 +6,13 @@
     GENETIC: { SIGMA: 0.15 },
     SIMULATION: {
       GEN_SECONDS: 30,
+      GEN_SECONDS_MIN: 10,
+      GEN_SECONDS_MAX: 120,
       STEPS_PER_GEN: 1800,
+      STEPS_PER_GEN_MIN: 600,
+      STEPS_PER_GEN_MAX: 3600,
       SPEED: 5,
-      STEPS_PER_SECOND: 60,
-      MIN_STEPS_PER_GEN: 50,
-      TURBO_SPEED_MULTIPLIER: 10,
-      MAX_TURBO_ITERATIONS: 500,
+
       MAX_POPULATION: 300,
       MIN_POPULATION: 50,
       STORAGE_KEY: "cooperacao_simulation",
@@ -21,7 +22,7 @@
       SENSOR_COUNT: 5,
       BASE_RADIUS: 18,
       MINE_TIMER_BASE: 30,
-      DEPOSIT_TIMER_BASE: 15,
+
     },
     PHYSICS: {
       MAX_SPEED: 2.2,
@@ -96,9 +97,7 @@
       this._next = v * m;
       return mean + u * m * sd;
     }
-    choose<T>(arr: T[]): T {
-      return arr[this.int(arr.length)];
-    }
+
   }
 
   const UI = DOMManager.init();
@@ -108,7 +107,7 @@
   let rng: RNG = new RNG(SEED);
   let SIM: Simulation | null = null;
 
-  const { clamp, distance: dist, pointInRect } = GeometryUtils;
+  const { clamp, pointInRect } = GeometryUtils;
 
   class World {
     w: number;
@@ -116,12 +115,14 @@
     base: Base;
     stones: Stone[];
     obstacles: Rect[];
+    stonesDelivered: number;
     constructor(w: number, h: number) {
       this.w = w;
       this.h = h;
       this.base = { x: w / 2, y: h / 2, r: CONFIG.AGENT.BASE_RADIUS };
       this.stones = [];
       this.obstacles = [];
+      this.stonesDelivered = 0;
     }
   }
 
@@ -133,7 +134,7 @@
     state: "SEEK" | "MINING" | "DEPOSIT";
     carry: boolean;
     mineTimer: number;
-    depositTimer: number;
+
     memory: { angle: number; dist: number };
     delivered: number;
     deliveries: number;
@@ -161,7 +162,7 @@
       this.state = "SEEK";
       this.carry = false;
       this.mineTimer = 0;
-      this.depositTimer = 0;
+
       this.memory = { angle: 0, dist: 0 };
       this.delivered = 0;
       this.deliveries = 0;
@@ -397,6 +398,7 @@
           agent.carry = false;
           agent.state = "SEEK";
           justDeposited = true;
+          world.stonesDelivered++; // Incrementa contador global
           return { justPicked, justDeposited, attemptedMine, attemptedDeposit };
         }
       }
@@ -423,7 +425,7 @@
         if (agent.state === "MINING" || agent.state === "DEPOSIT") {
           agent.state = "SEEK";
           agent.mineTimer = 0;
-          agent.depositTimer = 0;
+
         }
       }
       return { justPicked, justDeposited, attemptedMine, attemptedDeposit };
@@ -588,7 +590,7 @@
     }
 
     _trackBaseExit(agent: Agent, world: World): void {
-      const distToBase = dist(agent.x, agent.y, world.base.x, world.base.y);
+      const distToBase = Math.hypot(agent.x - world.base.x, agent.y - world.base.y);
       const baseRadius = world.base.r + 25;
       if (distToBase > baseRadius) agent.hasLeftBase = true;
       if (agent.delivered > 0 && distToBase <= baseRadius)
@@ -656,6 +658,7 @@
     SIM.speed = CONFIG.SIMULATION.SPEED;
     (window as any).SIM = SIM;
     ChartManager.init();
+    DOMManager.setupInputs(); // Configura controles de range
     DOMManager.updateUI(SIM);
     SIM.initWorld();
     SIM.sanityCheck();
@@ -707,6 +710,7 @@
     }
     if (SIM.running) for (let i = 0; i < SIM.speed; i++) SIM.stepAll();
     Renderer.draw(SIM.world, SIM.population, SIM);
+    DOMManager.updateUI(SIM); // Atualiza contador de pedras
     if (SIM.sanityFailed)
       Renderer.drawRedText(ctx, "Sanity check failed - reset required");
     requestAnimationFrame(loop);

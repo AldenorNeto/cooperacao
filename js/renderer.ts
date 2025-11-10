@@ -30,13 +30,20 @@ const RendererImpl = {
       ctx.fillText(s.quantity.toString(), s.x, s.y);
     }
 
-    // Base
+    // Base vermelha com contador
     ctx.beginPath();
-    ctx.fillStyle = "#fff1a8";
-    ctx.strokeStyle = "#d9b24a";
+    ctx.fillStyle = "#8B0000";
+    ctx.strokeStyle = "#FF0000";
     ctx.arc(world.base.x, world.base.y, world.base.r, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    
+    // Contador de pedras na base
+    ctx.fillStyle = "#FFF";
+    ctx.font = "14px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(world.stonesDelivered.toString(), world.base.x, world.base.y);
   },
 
   drawAgents(
@@ -80,7 +87,7 @@ const RendererImpl = {
   drawUI(ctx: CanvasRenderingContext2D, sim: Simulation): void {
     ctx.save();
     ctx.fillStyle = "rgba(2,6,10,0.35)";
-    ctx.fillRect(8, 8, 340, 96);
+    ctx.fillRect(8, 8, 340, 114);
     ctx.fillStyle = "#cfe7ff";
     ctx.font = "12px sans-serif";
     ctx.textAlign = "left";
@@ -89,6 +96,7 @@ const RendererImpl = {
     ctx.fillText(`Delivered: ${sim.bestDelivered}`, 14, 62);
     ctx.fillText(`Steps: ${sim.genStepCount}/${sim.stepsPerGen}`, 14, 80);
     ctx.fillText(`Pop: ${sim.population.length}`, 200, 80);
+    ctx.fillText(`Total Stones: ${sim.world?.stonesDelivered ?? 0}`, 14, 98);
     ctx.restore();
   },
 

@@ -53,13 +53,11 @@ interface RewardSystemFull extends RewardSystemInterface {
   _compareMultiObjective(a: Agent, b: Agent): number;
   _getTargetDistance(agent: Agent, world: World): number;
 
-  // utilitários públicos já existentes (re-declarados para completude)
   updateReward(rewardName: string, newValue: number): boolean;
   getRewardConfig(): RewardConfig;
   calculateImmobilityPenalty(agent: Agent): number;
 }
 
-// Implementação tipada
 const RewardSystemImpl: RewardSystemFull = {
   _populationStats: { avgWrongMines: 0, avgExperience: 0 },
 
@@ -258,8 +256,7 @@ const RewardSystemImpl: RewardSystemFull = {
   _calculateStagePoints(
     agent: Agent,
     actionInfo: ActionResult,
-    world: World,
-    stage: number
+    world: World
   ): number {
     let points = 0;
 
@@ -268,7 +265,6 @@ const RewardSystemImpl: RewardSystemFull = {
     points += this.calculateProximityBonus(agent, world);
     points += this.calculateReturnToBaseBonus(agent, world);
 
-    // MemorySystem é declarado no types.d.ts; usamos diretamente
     if (
       typeof MemorySystem !== "undefined" &&
       MemorySystem?.calculateMemoryBonus
@@ -296,7 +292,7 @@ const RewardSystemImpl: RewardSystemFull = {
 
   _calculateMultiObjectiveMetrics(
     agents: Agent[],
-    world: World
+    _world: World
   ): MultiObjectiveMetrics[] {
     return agents.map((agent) => ({
       deliveries: agent.deliveries,
@@ -320,7 +316,7 @@ const RewardSystemImpl: RewardSystemFull = {
       "survival",
     ];
     const normalized: MultiObjectiveMetrics[] = metrics.map(
-      () => ({} as MultiObjectiveMetrics)
+      () => ({}) as MultiObjectiveMetrics
     );
 
     keys.forEach((key) => {
@@ -413,7 +409,6 @@ const RewardSystemImpl: RewardSystemFull = {
   },
 };
 
-// Exporta para uso global
 if (typeof window !== "undefined") {
   (window as any).RewardSystem = RewardSystemImpl;
 }

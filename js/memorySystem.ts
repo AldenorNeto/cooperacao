@@ -1,29 +1,8 @@
 const MemorySystemImpl = {
   /**
-   * Adiciona memória de comportamento bem-sucedido
-   */
-  recordSuccessfulBehavior(agent: Agent, world: World): void {
-    if (!agent.memory) {
-      agent.memory = { angle: 0, dist: 0 };
-    }
-    
-    // Registra posição quando pega pedra
-    if (agent.carry && !agent.memory.lastPickupPosition) {
-      agent.memory.lastPickupPosition = { x: agent.x, y: agent.y };
-    }
-    
-    // Registra caminho de retorno bem-sucedido
-    if (agent.delivered > (agent.memory.lastDeliveryCount || 0)) {
-      agent.memory.lastDeliveryCount = agent.delivered;
-      agent.memory.lastSuccessfulReturnPath = [...agent.trail];
-      agent.memory.lastPickupPosition = undefined;
-    }
-  },
-
-  /**
    * Calcula bonus por repetir comportamento bem-sucedido
    */
-  calculateMemoryBonus(agent: Agent, world: World): number {
+  calculateMemoryBonus(agent: Agent): number {
     if (!agent.memory || !agent.memory.lastSuccessfulReturnPath) return 0;
     
     // Se está carregando pedra, dá bonus por seguir caminho similar ao anterior

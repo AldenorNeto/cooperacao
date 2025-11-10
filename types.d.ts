@@ -28,10 +28,13 @@ interface Agent extends Point {
   state: "SEEK" | "MINING" | "DEPOSIT";
   carry: boolean;
   mineTimer: number;
-  depositTimer: number;
+
   memory: {
     angle: number;
     dist: number;
+    lastPickupPosition?: Point;
+    lastDeliveryCount?: number;
+    lastSuccessfulReturnPath?: Point[];
   };
   delivered: number;
   deliveries: number;
@@ -57,6 +60,7 @@ interface World {
   base: Base;
   stones: Stone[];
   obstacles: Rect[];
+  stonesDelivered: number;
 }
 
 interface Genome {
@@ -153,7 +157,6 @@ declare const SensorSystem: {
 
 // ----- MemorySystem (declarado globalmente) -----
 declare const MemorySystem: {
-  recordSuccessfulBehavior(agent: Agent, world: World): void;
   calculateMemoryBonus(agent: Agent, world: World): number;
 };
 
@@ -322,6 +325,7 @@ interface ConfigDisplayElements {
   sigma: HTMLElement | null;
   genTime: HTMLElement | null;
   speed: HTMLElement | null;
+  stonesDelivered: HTMLElement | null;
 }
 
 interface LabelElements {
@@ -552,6 +556,7 @@ declare const MapGenerator: {
     rng: RNG
   ): Stone[];
 };
+
 declare const Renderer: {
   draw(
     world: World,
@@ -560,6 +565,7 @@ declare const Renderer: {
   ): void;
   drawRedText(ctx: CanvasRenderingContext2D, msg: string): void;
 };
+
 declare const GeometryUtils: {
   clamp(v: number, a: number, b: number): number;
   distance(x1: number, y1: number, x2: number, y2: number): number;
@@ -575,10 +581,11 @@ declare const GeometryUtils: {
     cr: number
   ): number | null;
 };
+
 declare const MemorySystem: {
-  recordSuccessfulBehavior(agent: Agent, world: World): void;
   calculateMemoryBonus(agent: Agent, world: World): number;
 };
+
 declare const CONFIG: {
   POPULATION: { LAMBDA: number; MIN_SIZE: number; MAX_SIZE: number };
   GENETIC: { SIGMA: number };

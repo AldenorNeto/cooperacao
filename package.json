@@ -8,12 +8,18 @@
     "start": "npm run build && node dist/server.js",
     "type-check": "tsc --noEmit",
     "type-check:watch": "tsc --noEmit --watch",
-    "lint": "tsc --noEmit && echo 'Type checking passed!'"
+    "lint": "eslint js/**/*.ts",
+    "lint:fix": "eslint js/**/*.ts --fix",
+    "format": "prettier --write js/**/*.ts"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
     "@types/node": "^20.0.0",
-    "ts-node": "^10.9.0"
+    "ts-node": "^10.9.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0"
   },
   "keywords": ["genetic-algorithm", "agents", "simulation", "cooperation"],
   "author": "",

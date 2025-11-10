@@ -7,7 +7,7 @@ const SensorSystemImpl = {
     genome: Genome,
     world: World
   ): SensorData[] {
-    const range = genome.sensorRange;
+
     const sensorData: SensorData[] = [];
 
     for (let i = 0; i < 3; i++) {
@@ -25,7 +25,7 @@ const SensorSystemImpl = {
   extractInputs(
     sensorData: SensorData[],
     agent: Agent,
-    world: World
+    _world: World
   ): number[] {
     const inputs = new Array(21).fill(0);
     let idx = 0;
