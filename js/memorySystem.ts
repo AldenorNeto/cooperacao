@@ -6,7 +6,7 @@ const MemorySystemImpl = {
     if (!agent.memory || !agent.memory.lastSuccessfulReturnPath) return 0;
     
     // Se está carregando pedra, dá bonus por seguir caminho similar ao anterior
-    if (agent.carry && agent.memory.lastSuccessfulReturnPath.length > 0) {
+    if (agent.state === "CARRYING" && agent.memory.lastSuccessfulReturnPath.length > 0) {
       const pathSimilarity = this._calculatePathSimilarity(
         agent.trail,
         agent.memory.lastSuccessfulReturnPath

@@ -27,7 +27,7 @@ const SensorSystemImpl = {
     agent: Agent,
     _world: World
   ): number[] {
-    const inputs = new Array(21).fill(0);
+    const inputs = new Array(20).fill(0);
     let idx = 0;
 
     // Dados dos sensores (3 por sensor)
@@ -46,10 +46,9 @@ const SensorSystemImpl = {
       agent.lastSeen.dist == null
         ? 0
         : GeometryUtils.clamp(1 - agent.lastSeen.dist, 0, 1);
-    inputs[idx++] = agent.carry ? 1.0 : 0.0;
     inputs[idx++] = agent.state === "SEEK" ? 1.0 : 0.0;
     inputs[idx++] = agent.state === "MINING" ? 1.0 : 0.0;
-    inputs[idx++] = agent.state === "DEPOSIT" ? 1.0 : 0.0;
+    inputs[idx++] = agent.state === "CARRYING" ? 1.0 : 0.0;
 
     return inputs;
   },

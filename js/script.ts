@@ -22,7 +22,6 @@
       SENSOR_COUNT: 5,
       BASE_RADIUS: 18,
       MINE_TIMER_BASE: 30,
-
     },
     PHYSICS: {
       MAX_SPEED: 2.2,
@@ -34,7 +33,7 @@
       BOUNDARY_MARGIN: 2,
     },
     GENOME: {
-      INPUTS: 21,
+      INPUTS: 20,
       HIDDEN: 8,
       OUTPUTS: 3,
       SENSOR_ANGLE_BASE: 0.35,
@@ -97,7 +96,6 @@
       this._next = v * m;
       return mean + u * m * sd;
     }
-
   }
 
   const UI = DOMManager.init();
@@ -131,8 +129,7 @@
     y: number;
     a: number;
     v: number;
-    state: "SEEK" | "MINING" | "DEPOSIT";
-    carry: boolean;
+    state: "SEEK" | "MINING" | "CARRYING";
     mineTimer: number;
 
     memory: { angle: number; dist: number };
@@ -148,6 +145,7 @@
     lastSeen?: { angle: number | null; dist: number | null };
     sensorData?: SensorData[];
     hasLeftBase: boolean;
+    formaDeNascimento?: 'elite' | 'mutacao' | 'mesclagem' | 'random';
 
     constructor(
       x: number,
@@ -160,7 +158,6 @@
       this.a = angle;
       this.v = 0;
       this.state = "SEEK";
-      this.carry = false;
       this.mineTimer = 0;
 
       this.memory = { angle: 0, dist: 0 };
@@ -174,6 +171,7 @@
       this.genome = genome;
       this.id = Math.floor(Math.random() * 1e9);
       this.hasLeftBase = false;
+      this.formaDeNascimento = 'random';
     }
     record() {
       this.trail.push({ x: this.x, y: this.y });
@@ -317,6 +315,9 @@
     showSensors: boolean;
     showTrails: boolean;
     debug: boolean;
+    debugMode: boolean;
+    lastStepResult: StepResult | null;
+    trackedAgent: Agent | null;
     population: Agent[];
     maxPopulation: number;
     minPopulation: number;
@@ -341,6 +342,9 @@
       this.showSensors = false;
       this.showTrails = false;
       this.debug = false;
+      this.debugMode = false;
+      this.lastStepResult = null;
+      this.trackedAgent = null;
       this.population = [];
       this.maxPopulation = CONFIG.SIMULATION.MAX_POPULATION;
       this.minPopulation = CONFIG.SIMULATION.MIN_POPULATION;
@@ -387,7 +391,7 @@
         attemptedMine = false,
         attemptedDeposit = false;
 
-      if (agent.carry) {
+      if (agent.state === "CARRYING") {
         const dx = agent.x - world.base.x,
           dy = agent.y - world.base.y;
         const maxDist = world.base.r + CONFIG.ACTIONS.DEPOSIT_DISTANCE;
@@ -395,10 +399,9 @@
           attemptedDeposit = true;
           agent.delivered++;
           agent.deliveries++;
-          agent.carry = false;
           agent.state = "SEEK";
           justDeposited = true;
-          world.stonesDelivered++; // Incrementa contador global
+          world.stonesDelivered++;
           return { justPicked, justDeposited, attemptedMine, attemptedDeposit };
         }
       }
@@ -407,14 +410,13 @@
       if (wantsToMine) {
         attemptedMine = true;
         const nearStone = this._findNearStone(agent, world);
-        if (nearStone && !agent.carry) {
+        if (nearStone && agent.state !== "CARRYING") {
           agent.state = "MINING";
           agent.mineTimer = (agent.mineTimer || 0) + 1;
           if (agent.mineTimer >= CONFIG.AGENT.MINE_TIMER_BASE) {
             nearStone.quantity = Math.max(0, nearStone.quantity - 1);
-            agent.carry = true;
+            agent.state = "CARRYING";
             agent.hasMinedBefore = true;
-            agent.state = "SEEK";
             agent.mineTimer = 0;
             justPicked = true;
           }
@@ -422,10 +424,9 @@
           agent.state = "MINING";
         }
       } else {
-        if (agent.state === "MINING" || agent.state === "DEPOSIT") {
+        if (agent.state === "MINING") {
           agent.state = "SEEK";
           agent.mineTimer = 0;
-
         }
       }
       return { justPicked, justDeposited, attemptedMine, attemptedDeposit };
@@ -450,7 +451,7 @@
       rot: number,
       maxSpeed: number
     ): void {
-      if (agent.state === "MINING" || agent.state === "DEPOSIT") {
+      if (agent.state === "MINING") {
         agent.v = 0;
         return;
       }
@@ -543,26 +544,19 @@
     }
 
     buildPopulation() {
-      const lambda = clamp(
-        this.lambda,
-        this.minPopulation - 1,
-        this.maxPopulation - 1
-      );
-      const popSize = 1 + lambda;
+      const popSize = this.debugMode ? 1 : 1 + clamp(this.lambda, this.minPopulation - 1, this.maxPopulation - 1);
 
-      if (this.population.length === 0) {
-        localStorage.removeItem(this.storageKey);
-        this.population = [];
-        for (let i = 0; i < popSize; i++) {
-          const g = new Genome(rng);
-          const a = new Agent(
-            this.world.base.x + this.world.base.r + 6 + rng.float(-6, 6),
-            this.world.base.y + rng.float(-6, 6),
-            rng.float(0, Math.PI * 2),
-            g
-          );
-          this.population.push(a);
-        }
+      localStorage.removeItem(this.storageKey);
+      this.population = [];
+      for (let i = 0; i < popSize; i++) {
+        const g = new Genome(rng);
+        const a = new Agent(
+          this.world.base.x + this.world.base.r + 6 + rng.float(-6, 6),
+          this.world.base.y + rng.float(-6, 6),
+          rng.float(0, Math.PI * 2),
+          g
+        );
+        this.population.push(a);
       }
     }
 
@@ -575,8 +569,14 @@
         this._updateAgentFitness(agent, info);
         agent.age++;
         agent.record();
+        
+        if (agent === this.population[0] || agent.formaDeNascimento === 'elite') {
+          this.lastStepResult = info;
+        }
       }
-      if (this.genStepCount >= this.stepsPerGen) this.endGeneration();
+      if (this.genStepCount >= this.stepsPerGen) {
+        this.endGeneration();
+      }
     }
 
     _updateAgentFitness(agent: Agent, info: ActionResult): void {
@@ -590,7 +590,10 @@
     }
 
     _trackBaseExit(agent: Agent, world: World): void {
-      const distToBase = Math.hypot(agent.x - world.base.x, agent.y - world.base.y);
+      const distToBase = Math.hypot(
+        agent.x - world.base.x,
+        agent.y - world.base.y
+      );
       const baseRadius = world.base.r + 25;
       if (distToBase > baseRadius) agent.hasLeftBase = true;
       if (agent.delivered > 0 && distToBase <= baseRadius)
@@ -598,6 +601,31 @@
     }
 
     endGeneration() {
+      if (this.debugMode) {
+        // No modo debug, apenas reseta o agente e regenera pedras
+        const agent = this.population[0];
+        if (agent) {
+          agent.x = this.world.base.x + this.world.base.r + 6 + rng.float(-6, 6);
+          agent.y = this.world.base.y + rng.float(-6, 6);
+          agent.a = rng.float(0, Math.PI * 2);
+          agent.v = 0;
+          agent.state = "SEEK";
+          agent.mineTimer = 0;
+          agent.age = 0;
+          agent.trail = [];
+          agent.fitness = 0;
+          agent.delivered = 0;
+          agent.deliveries = 0;
+          agent.hasMinedBefore = false;
+          agent.collisions = 0;
+          agent.hasLeftBase = false;
+        }
+        this.generation++;
+        this.regenStones(3);
+        this.genStepCount = 0;
+        return;
+      }
+      
       const evolutionResult = GeneticSystem.evolvePopulation(
         this.population,
         this.world,
@@ -606,7 +634,6 @@
         Genome
       );
 
-      // Calcula total de entregas da população
       const totalDelivered = this.population.reduce(
         (sum, agent) => sum + agent.delivered,
         0
@@ -658,21 +685,13 @@
     SIM.speed = CONFIG.SIMULATION.SPEED;
     (window as any).SIM = SIM;
     ChartManager.init();
-    DOMManager.setupInputs(); // Configura controles de range
+    DOMManager.setupInputs(); 
     DOMManager.updateUI(SIM);
     SIM.initWorld();
     SIM.sanityCheck();
 
     window.addEventListener("resize", () => {
       DOMManager.resizeCanvas();
-      SIM.initWorld();
-    });
-    cvs.addEventListener("click", (e) => {
-      const r = cvs.getBoundingClientRect();
-      const x = (e.clientX - r.left) * (cvs.width / r.width);
-      const y = (e.clientY - r.top) * (cvs.height / r.height);
-      SIM.world.base.x = x;
-      SIM.world.base.y = y;
       SIM.initWorld();
     });
 
@@ -684,7 +703,30 @@
       SIM.genSeconds = CONFIG.SIMULATION.GEN_SECONDS;
       SIM.stepsPerGen = CONFIG.SIMULATION.STEPS_PER_GEN;
       SIM.speed = CONFIG.SIMULATION.SPEED;
+      SIM.debugMode = false;
       SIM.initWorld();
+      DOMManager.updateUI(SIM);
+      
+      const debugPanel = document.getElementById('debugPanel');
+      const debugBtn = document.getElementById('btnDebug');
+      if (debugPanel) debugPanel.style.display = 'none';
+      if (debugBtn) debugBtn.classList.remove('active');
+    });
+
+    UI.buttons.debug.addEventListener("click", () => {
+      SIM.debugMode = !SIM.debugMode;
+      const debugPanel = document.getElementById('debugPanel');
+      const debugBtn = document.getElementById('btnDebug');
+      
+      if (SIM.debugMode) {
+        debugBtn.classList.add('active');
+        debugPanel.style.display = 'block';
+      } else {
+        debugBtn.classList.remove('active');
+        debugPanel.style.display = 'none';
+      }
+      
+      SIM.buildPopulation();
       DOMManager.updateUI(SIM);
     });
 

@@ -25,8 +25,7 @@ interface Stone extends Circle {
 interface Agent extends Point {
   a: number; // angle
   v: number; // velocity
-  state: "SEEK" | "MINING" | "DEPOSIT";
-  carry: boolean;
+  state: "SEEK" | "MINING" | "CARRYING";
   mineTimer: number;
 
   memory: {
@@ -51,6 +50,7 @@ interface Agent extends Point {
   wrongMineAttempts?: number;
   detailedScore?: MultiObjectiveMetrics;
   hasLeftBase: boolean;
+  formaDeNascimento?: 'elite' | 'mutacao' | 'mesclagem' | 'random';
   record(): void;
 }
 
@@ -318,6 +318,7 @@ interface DOMButtons {
   reset: HTMLElement | null;
   save: HTMLElement | null;
   load: HTMLElement | null;
+  debug: HTMLElement | null;
 }
 
 interface ConfigDisplayElements {
@@ -368,6 +369,9 @@ interface SimulationView {
   showSensors?: boolean;
   showTrails?: boolean;
   debug?: boolean;
+  debugMode?: boolean;
+  lastStepResult?: StepResult | null;
+  trackedAgent?: Agent | null;
   population: Agent[];
   maxPopulation?: number;
   minPopulation?: number;
@@ -382,6 +386,7 @@ interface SimulationView {
   regenStones?(minTotalQuantity: number): void;
   stepAll?(): void;
   sanityCheck?(): boolean;
+  buildPopulation?(): void;
 }
 
 interface DOMManagerInterface {
@@ -419,6 +424,9 @@ interface Simulation {
   showSensors: boolean;
   showTrails: boolean;
   debug: boolean;
+  debugMode: boolean;
+  lastStepResult: StepResult | null;
+  trackedAgent: Agent | null;
   population: Agent[];
   maxPopulation: number;
   minPopulation: number;

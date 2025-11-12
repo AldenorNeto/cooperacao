@@ -15,6 +15,7 @@
         <div class="row">
           <button id="btnStart">Start</button>
           <button id="btnReset" class="ghost">Reset</button>
+          <button id="btnDebug" class="debug">Debug Mode</button>
         </div>
 
         <div class="config-display">
@@ -46,6 +47,47 @@
         <div style="height: 8px"></div>
 
         <div id="debugBox" class="monos"></div>
+        
+        <!-- Debug Panel -->
+        <div id="debugPanel" class="debug-panel" style="display: none;">
+          <h4>Debug Mode - Single Agent Analysis</h4>
+          <div id="agentInfo" class="debug-section">
+            <div class="debug-row">
+              <span>Position:</span> <span id="agentPos">0, 0</span>
+            </div>
+            <div class="debug-row">
+              <span>Angle:</span> <span id="agentAngle">0°</span>
+            </div>
+            <div class="debug-row">
+              <span>Velocity:</span> <span id="agentVel">0</span>
+            </div>
+            <div class="debug-row">
+              <span>State:</span> <span id="agentState">SEEK</span>
+            </div>
+            <div class="debug-row">
+              <span>Carry:</span> <span id="agentCarry">false</span>
+            </div>
+            <div class="debug-row">
+              <span>Fitness:</span> <span id="agentFitness">0</span>
+            </div>
+          </div>
+          
+          <div id="sensorInfo" class="debug-section">
+            <h5>Sensor Inputs</h5>
+            <div id="sensorValues"></div>
+          </div>
+          
+          <div id="networkInfo" class="debug-section">
+            <h5>Neural Network</h5>
+            <div id="networkInputs"></div>
+            <div id="networkOutputs"></div>
+          </div>
+          
+          <div id="networkCanvas" class="debug-section">
+            <h5>Network Visualization</h5>
+            <canvas id="neuralCanvas" width="300" height="200"></canvas>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -65,6 +107,9 @@
     <script src="js/domManager.js"></script>
     <script src="js/chartManager.js"></script>
 
+    <!-- Debug System -->
+    <script src="js/debugSystem.js"></script>
+    
     <!-- Script principal: roda por último e usa os globals -->
     <script src="js/script.js"></script>
   </body>

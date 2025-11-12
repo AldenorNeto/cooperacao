@@ -115,9 +115,9 @@ const GeneticSystemImpl: GeneticSystemInterface = {
 
     // 1. Preserva elite (sempre top 5 no mínimo)
     for (let i = 0; i < eliteSize; i++) {
-      newPopulation.push(
-        this._cloneAgent(rankedAgents[i], world, rng, AgentClass)
-      );
+      const elite = this._cloneAgent(rankedAgents[i], world, rng, AgentClass);
+      elite.formaDeNascimento = 'elite';
+      newPopulation.push(elite);
     }
 
     // 2. Cruzamento entre os melhores
@@ -136,6 +136,7 @@ const GeneticSystemImpl: GeneticSystemInterface = {
         AgentClass,
         GenomeClass
       );
+      child.formaDeNascimento = 'mesclagem';
       newPopulation.push(child);
     }
 
@@ -143,6 +144,7 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     for (let i = 0; i < mutationSize; i++) {
       const parent = this._selectParent(parentPool, rng);
       const mutant = this._mutateAgent(parent, world, rng, AgentClass);
+      mutant.formaDeNascimento = 'mutacao';
       newPopulation.push(mutant);
     }
 
@@ -154,6 +156,7 @@ const GeneticSystemImpl: GeneticSystemInterface = {
         AgentClass,
         GenomeClass
       );
+      randomAgent.formaDeNascimento = 'random';
       newPopulation.push(randomAgent);
     }
 

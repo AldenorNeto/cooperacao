@@ -139,7 +139,7 @@ const RewardSystemImpl: RewardSystemFull = {
 
     if (actionInfo.attemptedMine) {
       const nearStone = this._findNearStone(agent, world);
-      if (nearStone && !agent.carry) {
+      if (nearStone && agent.state !== "CARRYING") {
         reward += this.REWARDS.CORRECT_MINE_ATTEMPT;
       } else {
         reward += this.calculateAdaptivePenalty(agent, "WRONG_MINE");
@@ -148,7 +148,7 @@ const RewardSystemImpl: RewardSystemFull = {
 
     if (actionInfo.attemptedDeposit) {
       const nearBase = this._isNearBase(agent, world);
-      if (nearBase && agent.carry) {
+      if (nearBase && agent.state === "CARRYING") {
         reward += this.REWARDS.CORRECT_DEPOSIT_ATTEMPT;
       } else {
         reward += this.calculateAdaptivePenalty(agent, "WRONG_DEPOSIT");
@@ -159,14 +159,14 @@ const RewardSystemImpl: RewardSystemFull = {
   },
 
   calculateImmobilityPenalty(agent: Agent): number {
-    if (agent.state === "MINING" || agent.state === "DEPOSIT") {
+    if (agent.state === "MINING") {
       return this.REWARDS.IMMOBILE_COST;
     }
     return 0;
   },
 
   calculateReturnToBaseBonus(agent: Agent, world: World): number {
-    if (!agent.carry) return 0;
+    if (agent.state !== "CARRYING") return 0;
 
     const distToBase = this._distanceToBase(agent, world);
     const maxDist = Math.hypot(world.w, world.h);
@@ -186,7 +186,7 @@ const RewardSystemImpl: RewardSystemFull = {
   calculateProximityBonus(agent: Agent, world: World): number {
     let bonus = 0;
 
-    if (agent.carry) {
+    if (agent.state === "CARRYING") {
       const d = this._distanceToBase(agent, world);
       const normalizedDistance = d / Math.hypot(world.w, world.h);
       const proximityFactor = Math.max(0, 1 - normalizedDistance);
@@ -227,7 +227,7 @@ const RewardSystemImpl: RewardSystemFull = {
   ): number {
     if (actionInfo.attemptedMine) {
       const nearStone = this._findNearStone(agent, world);
-      if (nearStone && !agent.carry) {
+      if (nearStone && agent.state !== "CARRYING") {
         agent.correctMineAttempts = (agent.correctMineAttempts || 0) + 1;
       } else {
         agent.wrongMineAttempts = (agent.wrongMineAttempts || 0) + 1;
@@ -248,7 +248,7 @@ const RewardSystemImpl: RewardSystemFull = {
     if (agent.deliveries >= 3) return 5;
     if (agent.deliveries >= 2) return 4;
     if (agent.deliveries === 1) return 3;
-    if (agent.carry && agent.hasMinedBefore) return 2;
+    if (agent.state === "CARRYING" && agent.hasMinedBefore) return 2;
     if (agent.hasMinedBefore || agent.hasLeftBase) return 1;
     return 0;
   },
@@ -356,7 +356,7 @@ const RewardSystemImpl: RewardSystemFull = {
   },
 
   _getTargetDistance(agent: Agent, world: World): number {
-    if (agent.carry) return this._distanceToBase(agent, world);
+    if (agent.state === "CARRYING") return this._distanceToBase(agent, world);
     return this._findNearestStoneDistance(agent, world);
   },
 
