@@ -1,8 +1,27 @@
 interface GeneticSystemInterface {
-  CONFIG: Config;
-  state: GeneticSystemState;
+  CONFIG: {
+    ELITE_PERCENTAGE: number;
+    CROSSOVER_PERCENTAGE: number;
+    MUTATION_PERCENTAGE: number;
+    MOMENTUM_PERCENTAGE: number;
+    CROSSOVER_RATE: number;
+    MUTATION_STRENGTH_MIN: number;
+    MUTATION_STRENGTH_MAX: number;
+    DIVERSITY_THRESHOLD: number;
+    STAGNATION_GENERATIONS: number;
+    TOURNAMENT_SIZE: number;
+    SELECTION_PRESSURE: number;
+    MIN_FITNESS_THRESHOLD: number;
+  };
 
-  // API principal
+  state: {
+    stagnationCount: number;
+    lastBestFitness: number;
+    diversityHistory: number[];
+    adaptiveSigma: number;
+    championHistory: Genome[];
+  };
+
   evolvePopulation(
     population: Agent[],
     world: World,
@@ -19,7 +38,8 @@ interface GeneticSystemInterface {
   };
 
   _rankAndEvaluate(population: Agent[], world: World): Agent[];
-
+  _filterWeakAgents(rankedAgents: Agent[]): Agent[];
+  _selectParentProportional(parentPool: Agent[], rng: RNG): Agent;
   _selectParent(parentPool: Agent[], rng: RNG): Agent;
 
   _crossover(
@@ -33,6 +53,13 @@ interface GeneticSystemInterface {
 
   _mutateAgent(
     parent: Agent,
+    world: World,
+    rng: RNG,
+    AgentClass: AgentConstructor
+  ): Agent;
+
+  _createMomentumMutant(
+    elite: Agent,
     world: World,
     rng: RNG,
     AgentClass: AgentConstructor
@@ -60,39 +87,40 @@ interface GeneticSystemInterface {
   ): Agent;
 
   _calculateDiversity(population: Agent[]): number;
-
   _genomicDistance(genome1: Genome, genome2: Genome): number;
-
   _updateSystemState(currentBestFitness: number): void;
+  _applyMomentumToWeights(
+    targetWeights: Float32Array,
+    championWeights: Float32Array[],
+    rng: RNG
+  ): void;
+  _calculateMomentum(values: number[]): number;
 }
 
 const GeneticSystemImpl: GeneticSystemInterface = {
-  // Configurações do sistema genético
   CONFIG: {
-    ELITE_PERCENTAGE: 0.2, // 20% dos melhores são preservados
-    CROSSOVER_PERCENTAGE: 0.55, // 55% da nova população vem de cruzamento
-    MUTATION_PERCENTAGE: 0.25, // 25% são mutações puras
-    RANDOM_PERCENTAGE: 0.0, // 0% são completamente aleatórios
-
-    CROSSOVER_RATE: 0.7, // Probabilidade de cruzamento vs clonagem
-    MUTATION_STRENGTH_MIN: 0.08, // Mutação mínima (aumentada)
-    MUTATION_STRENGTH_MAX: 0.5, // Mutação máxima (aumentada)
-
-    DIVERSITY_THRESHOLD: 0.1, // Limite para detectar baixa diversidade
-    STAGNATION_GENERATIONS: 10, // Gerações sem melhoria = estagnação
+    ELITE_PERCENTAGE: 0.08,
+    CROSSOVER_PERCENTAGE: 0.6,
+    MUTATION_PERCENTAGE: 0.27,
+    MOMENTUM_PERCENTAGE: 0.05,
+    CROSSOVER_RATE: 0.75,
+    MUTATION_STRENGTH_MIN: 0.12,
+    MUTATION_STRENGTH_MAX: 0.5,
+    DIVERSITY_THRESHOLD: 0.1,
+    STAGNATION_GENERATIONS: 8,
+    TOURNAMENT_SIZE: 5,
+    SELECTION_PRESSURE: 1.8,
+    MIN_FITNESS_THRESHOLD: 0.15,
   },
 
-  // Estado do sistema
   state: {
     stagnationCount: 0,
     lastBestFitness: 0,
-    diversityHistory: [] as number[],
+    diversityHistory: [],
     adaptiveSigma: 0.12,
+    championHistory: [],
   },
 
-  /**
-   * Gera nova população baseada na atual
-   */
   evolvePopulation(
     currentPopulation: Agent[],
     world: World,
@@ -101,33 +129,29 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     GenomeClass: GenomeConstructor
   ): EvolutionResult {
     const rankedAgents = this._rankAndEvaluate(currentPopulation, world);
+    const filteredAgents = this._filterWeakAgents(rankedAgents);
     const newPopulation: Agent[] = [];
     const popSize = currentPopulation.length;
 
-    // Calcula tamanhos dos grupos - sempre preserva top 5
     const eliteSize = Math.max(
-      5,
+      3,
       Math.floor(popSize * this.CONFIG.ELITE_PERCENTAGE)
     );
-    const crossoverSize = Math.floor((popSize - eliteSize) * 0.7);
-    const mutationSize = Math.floor((popSize - eliteSize) * 0.25);
-    const randomSize = popSize - eliteSize - crossoverSize - mutationSize;
+    const crossoverSize = Math.floor(
+      popSize * this.CONFIG.CROSSOVER_PERCENTAGE
+    );
+    const mutationSize = Math.floor(popSize * this.CONFIG.MUTATION_PERCENTAGE);
+    const momentumSize = popSize - eliteSize - crossoverSize - mutationSize;
 
-    // 1. Preserva elite (sempre top 5 no mínimo)
     for (let i = 0; i < eliteSize; i++) {
-      const elite = this._cloneAgent(rankedAgents[i], world, rng, AgentClass);
-      elite.formaDeNascimento = 'elite';
+      const elite = this._cloneAgent(filteredAgents[i], world, rng, AgentClass);
+      elite.formaDeNascimento = "elite";
       newPopulation.push(elite);
     }
 
-    // 2. Cruzamento entre os melhores
-    const parentPool = rankedAgents.slice(
-      0,
-      Math.max(5, Math.floor(popSize * 0.3))
-    );
     for (let i = 0; i < crossoverSize; i++) {
-      const parent1 = this._selectParent(parentPool, rng);
-      const parent2 = this._selectParent(parentPool, rng);
+      const parent1 = this._selectParentProportional(filteredAgents, rng);
+      const parent2 = this._selectParentProportional(filteredAgents, rng);
       const child = this._crossover(
         parent1,
         parent2,
@@ -136,31 +160,33 @@ const GeneticSystemImpl: GeneticSystemInterface = {
         AgentClass,
         GenomeClass
       );
-      child.formaDeNascimento = 'mesclagem';
+      child.formaDeNascimento = "mesclagem";
       newPopulation.push(child);
     }
 
-    // 3. Mutações dos melhores
     for (let i = 0; i < mutationSize; i++) {
-      const parent = this._selectParent(parentPool, rng);
+      const parent = this._selectParentProportional(filteredAgents, rng);
       const mutant = this._mutateAgent(parent, world, rng, AgentClass);
-      mutant.formaDeNascimento = 'mutacao';
+      mutant.formaDeNascimento = "mutacao";
       newPopulation.push(mutant);
     }
 
-    // 4. Agentes completamente aleatórios (diversidade)
-    for (let i = 0; i < randomSize; i++) {
-      const randomAgent = this._createRandomAgent(
+    for (let i = 0; i < momentumSize; i++) {
+      const momentumAgent = this._createMomentumMutant(
+        filteredAgents[0],
         world,
         rng,
-        AgentClass,
-        GenomeClass
+        AgentClass
       );
-      randomAgent.formaDeNascimento = 'random';
-      newPopulation.push(randomAgent);
+      momentumAgent.formaDeNascimento = "mutacao";
+      newPopulation.push(momentumAgent);
     }
 
-    // Atualiza estado do sistema
+    this.state.championHistory.push(rankedAgents[0].genome.clone());
+    if (this.state.championHistory.length > 4) {
+      this.state.championHistory.shift();
+    }
+
     this._updateSystemState(rankedAgents[0].fitness);
 
     return {
@@ -171,28 +197,79 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     };
   },
 
-  /**
-   * Rankeia e avalia população
-   */
   _rankAndEvaluate(population: Agent[], world: World): Agent[] {
-    // Usa o sistema de recompensas para ranking
     const rankedAgents = RewardSystem.evaluatePopulation(population, world);
-
-    // Calcula diversidade genética
     const diversity = this._calculateDiversity(rankedAgents);
     this.state.diversityHistory.push(diversity);
     if (this.state.diversityHistory.length > 20) {
       this.state.diversityHistory.shift();
     }
-
     return rankedAgents;
   },
 
-  /**
-   * Seleciona pai usando torneio
-   */
+  _filterWeakAgents(rankedAgents: Agent[]): Agent[] {
+    if (rankedAgents.length < 10) return rankedAgents;
+
+    // Conta quantos agentes entregaram pelo menos 1 pedra
+    const agentsWithDeliveries = rankedAgents.filter(
+      (a) => a.deliveries > 0
+    ).length;
+    const percentageWithDeliveries = agentsWithDeliveries / rankedAgents.length;
+
+    // Conta quantos agentes pelo menos COLETARAM (hasMinedBefore)
+    const agentsWhoMined = rankedAgents.filter((a) => a.hasMinedBefore).length;
+    const percentageWhoMined = agentsWhoMined / rankedAgents.length;
+
+    // Se 5% ou mais entregaram, ELIMINA TODOS que não entregaram
+    if (percentageWithDeliveries >= 0.05) {
+      const filtered = rankedAgents.filter((a) => a.deliveries > 0);
+
+      if (filtered.length >= 10) {
+        return filtered;
+      }
+    }
+
+    // Se 5% ou mais coletaram (mas não entregaram ainda), ELIMINA quem nem coletou
+    if (percentageWhoMined >= 0.05 && agentsWithDeliveries === 0) {
+      const filtered = rankedAgents.filter((a) => a.hasMinedBefore);
+
+      if (filtered.length >= 10) {
+        return filtered;
+      }
+    }
+
+    // Fallback: filtro por fitness mínimo
+    const avgFitness =
+      rankedAgents.reduce((sum, a) => sum + a.fitness, 0) / rankedAgents.length;
+    const minFitness = avgFitness * this.CONFIG.MIN_FITNESS_THRESHOLD;
+    const filtered = rankedAgents.filter((a) => a.fitness >= minFitness);
+
+    // Garante pelo menos 70% da população original
+    return filtered.length >= Math.floor(rankedAgents.length * 0.7)
+      ? filtered
+      : rankedAgents.slice(0, Math.floor(rankedAgents.length * 0.85));
+  },
+
+  _selectParentProportional(parentPool: Agent[], rng: RNG): Agent {
+    const fitnessScores = parentPool.map((a) =>
+      Math.pow(a.fitness + 1, this.CONFIG.SELECTION_PRESSURE)
+    );
+    const totalFitness = fitnessScores.reduce((sum, f) => sum + f, 0);
+
+    let random = rng.rand() * totalFitness;
+    for (let i = 0; i < parentPool.length; i++) {
+      random -= fitnessScores[i];
+      if (random <= 0) return parentPool[i];
+    }
+
+    return parentPool[0];
+  },
+
   _selectParent(parentPool: Agent[], rng: RNG): Agent {
-    const tournamentSize = Math.min(3, parentPool.length);
+    const tournamentSize = Math.min(
+      this.CONFIG.TOURNAMENT_SIZE,
+      parentPool.length
+    );
     let best = parentPool[rng.int(parentPool.length)];
 
     for (let i = 1; i < tournamentSize; i++) {
@@ -205,9 +282,6 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     return best;
   },
 
-  /**
-   * Cruzamento entre dois pais
-   */
   _crossover(
     parent1: Agent,
     parent2: Agent,
@@ -217,7 +291,6 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     GenomeClass: GenomeConstructor
   ): Agent {
     if (rng.rand() > this.CONFIG.CROSSOVER_RATE) {
-      // Clona o melhor pai
       return this._cloneAgent(
         parent1.fitness > parent2.fitness ? parent1 : parent2,
         world,
@@ -230,36 +303,47 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     const genome2 = parent2.genome;
     const childGenome = new GenomeClass(rng);
 
-    // Cruzamento uniforme nos pesos ocultos
+    // Crossover PONDERADO - pai melhor contribui mais
+    const totalFitness = parent1.fitness + parent2.fitness + 0.01;
+    const parent1Prob = (parent1.fitness + 0.01) / totalFitness;
+
     for (let i = 0; i < genome1.hiddenWeights.length; i++) {
       childGenome.hiddenWeights[i] =
-        rng.rand() < 0.5 ? genome1.hiddenWeights[i] : genome2.hiddenWeights[i];
+        rng.rand() < parent1Prob
+          ? genome1.hiddenWeights[i]
+          : genome2.hiddenWeights[i];
     }
 
-    // Cruzamento nos biases ocultos
     for (let i = 0; i < genome1.hiddenBiases.length; i++) {
       childGenome.hiddenBiases[i] =
-        rng.rand() < 0.5 ? genome1.hiddenBiases[i] : genome2.hiddenBiases[i];
+        rng.rand() < parent1Prob
+          ? genome1.hiddenBiases[i]
+          : genome2.hiddenBiases[i];
     }
 
-    // Cruzamento nos pesos de saída
     for (let i = 0; i < genome1.outputWeights.length; i++) {
       childGenome.outputWeights[i] =
-        rng.rand() < 0.5 ? genome1.outputWeights[i] : genome2.outputWeights[i];
+        rng.rand() < parent1Prob
+          ? genome1.outputWeights[i]
+          : genome2.outputWeights[i];
     }
 
-    // Cruzamento nos biases de saída
     for (let i = 0; i < genome1.outputBiases.length; i++) {
       childGenome.outputBiases[i] =
-        rng.rand() < 0.5 ? genome1.outputBiases[i] : genome2.outputBiases[i];
+        rng.rand() < parent1Prob
+          ? genome1.outputBiases[i]
+          : genome2.outputBiases[i];
     }
 
-    // Média nos sensores
+    // Média ponderada nos sensores
     for (let i = 0; i < genome1.sensorAngles.length; i++) {
       childGenome.sensorAngles[i] =
-        (genome1.sensorAngles[i] + genome2.sensorAngles[i]) / 2;
+        genome1.sensorAngles[i] * parent1Prob +
+        genome2.sensorAngles[i] * (1 - parent1Prob);
     }
-    childGenome.sensorRange = (genome1.sensorRange + genome2.sensorRange) / 2;
+    childGenome.sensorRange =
+      genome1.sensorRange * parent1Prob +
+      genome2.sensorRange * (1 - parent1Prob);
 
     // Mutação leve no filho
     const lightMutation = this.state.adaptiveSigma * 0.3;
@@ -273,9 +357,6 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     return this._createAgentFromGenome(childGenome, world, rng, AgentClass);
   },
 
-  /**
-   * Mutação de um agente
-   */
   _mutateAgent(
     parent: Agent,
     world: World,
@@ -286,9 +367,92 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     return this._createAgentFromGenome(mutatedGenome, world, rng, AgentClass);
   },
 
-  /**
-   * Clona um agente
-   */
+  _createMomentumMutant(
+    elite: Agent,
+    world: World,
+    rng: RNG,
+    AgentClass: AgentConstructor
+  ): Agent {
+    if (this.state.championHistory.length < 2) {
+      // Não há histórico suficiente, faz mutação normal
+      return this._mutateAgent(elite, world, rng, AgentClass);
+    }
+
+    const mutatedGenome = elite.genome.clone();
+    const champions = this.state.championHistory;
+
+    // Escolhe aleatoriamente qual parte do genoma analisar
+    const genomePartChoice = rng.int(4);
+
+    if (genomePartChoice === 0) {
+      // Analisa hidden weights
+      this._applyMomentumToWeights(
+        mutatedGenome.hiddenWeights,
+        champions.map((c) => c.hiddenWeights),
+        rng
+      );
+    } else if (genomePartChoice === 1) {
+      // Analisa output weights
+      this._applyMomentumToWeights(
+        mutatedGenome.outputWeights,
+        champions.map((c) => c.outputWeights),
+        rng
+      );
+    } else if (genomePartChoice === 2) {
+      // Analisa hidden biases
+      this._applyMomentumToWeights(
+        mutatedGenome.hiddenBiases,
+        champions.map((c) => c.hiddenBiases),
+        rng
+      );
+    } else {
+      // Analisa sensores
+      for (let i = 0; i < mutatedGenome.sensorAngles.length; i++) {
+        const values = champions.map((c) => c.sensorAngles[i]);
+        const momentum = this._calculateMomentum(values);
+        mutatedGenome.sensorAngles[i] += momentum * 2.0; // Exagera a tendência
+      }
+
+      const rangeValues = champions.map((c) => c.sensorRange);
+      const rangeMomentum = this._calculateMomentum(rangeValues);
+      mutatedGenome.sensorRange += rangeMomentum * 2.0;
+      mutatedGenome.sensorRange = Math.max(30, mutatedGenome.sensorRange);
+    }
+
+    return this._createAgentFromGenome(mutatedGenome, world, rng, AgentClass);
+  },
+
+  _applyMomentumToWeights(
+    targetWeights: Float32Array,
+    championWeights: Float32Array[],
+    rng: RNG
+  ): void {
+    // Escolhe aleatoriamente alguns pesos para aplicar momentum
+    const numWeightsToMutate = Math.min(
+      20,
+      Math.floor(targetWeights.length * 0.1)
+    );
+
+    for (let i = 0; i < numWeightsToMutate; i++) {
+      const idx = rng.int(targetWeights.length);
+      const values = championWeights.map((w) => w[idx]);
+      const momentum = this._calculateMomentum(values);
+      targetWeights[idx] += momentum * 2.0; // Exagera a tendência
+    }
+  },
+
+  _calculateMomentum(values: number[]): number {
+    if (values.length < 2) return 0;
+
+    // Calcula a tendência linear (regressão simples)
+    let sumDelta = 0;
+    for (let i = 1; i < values.length; i++) {
+      sumDelta += values[i] - values[i - 1];
+    }
+
+    return sumDelta / (values.length - 1);
+  },
+
   _cloneAgent(
     parent: Agent,
     world: World,
@@ -299,9 +463,6 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     return this._createAgentFromGenome(clonedGenome, world, rng, AgentClass);
   },
 
-  /**
-   * Cria agente completamente aleatório
-   */
   _createRandomAgent(
     world: World,
     rng: RNG,
@@ -312,9 +473,6 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     return this._createAgentFromGenome(randomGenome, world, rng, AgentClass);
   },
 
-  /**
-   * Cria agente a partir de genoma
-   */
   _createAgentFromGenome(
     genome: Genome,
     world: World,
@@ -329,9 +487,6 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     );
   },
 
-  /**
-   * Calcula diversidade genética da população
-   */
   _calculateDiversity(population: Agent[]): number {
     if (population.length < 2) return 0;
 
@@ -352,9 +507,6 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     return comparisons > 0 ? totalDistance / comparisons : 0;
   },
 
-  /**
-   * Calcula distância entre dois genomas
-   */
   _genomicDistance(genome1: Genome, genome2: Genome): number {
     let distance = 0;
     const sampleSize = Math.min(50, genome1.hiddenWeights.length);
@@ -367,11 +519,7 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     return Math.sqrt(distance / sampleSize);
   },
 
-  /**
-   * Atualiza estado adaptativo do sistema
-   */
   _updateSystemState(currentBestFitness: number): void {
-    // Detecta estagnação
     if (currentBestFitness <= this.state.lastBestFitness + 0.01) {
       this.state.stagnationCount++;
     } else {
@@ -380,22 +528,18 @@ const GeneticSystemImpl: GeneticSystemInterface = {
 
     this.state.lastBestFitness = currentBestFitness;
 
-    // Ajusta sigma adaptativamente (mais agressivo)
     if (this.state.stagnationCount > this.CONFIG.STAGNATION_GENERATIONS) {
-      // Aumenta mutação se estagnado
       this.state.adaptiveSigma = Math.min(
         this.CONFIG.MUTATION_STRENGTH_MAX,
         this.state.adaptiveSigma * 1.3
       );
     } else {
-      // Diminui mutação se progredindo (mais devagar)
       this.state.adaptiveSigma = Math.max(
         this.CONFIG.MUTATION_STRENGTH_MIN,
         this.state.adaptiveSigma * 0.995
       );
     }
 
-    // Ajusta baseado na diversidade
     const avgDiversity =
       this.state.diversityHistory.length > 0
         ? this.state.diversityHistory.reduce((a, b) => a + b) /
@@ -410,9 +554,6 @@ const GeneticSystemImpl: GeneticSystemInterface = {
     }
   },
 
-  /**
-   * Obtém estatísticas do sistema genético
-   */
   getStats(): {
     stagnationCount: number;
     adaptiveSigma: string;
@@ -435,7 +576,6 @@ const GeneticSystemImpl: GeneticSystemInterface = {
   },
 };
 
-// Exporta para uso global
 if (typeof window !== "undefined") {
   (
     window as unknown as Window & { GeneticSystem: GeneticSystemInterface }

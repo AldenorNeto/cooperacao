@@ -145,7 +145,9 @@
     lastSeen?: { angle: number | null; dist: number | null };
     sensorData?: SensorData[];
     hasLeftBase: boolean;
-    formaDeNascimento?: 'elite' | 'mutacao' | 'mesclagem' | 'random';
+    formaDeNascimento?: "elite" | "mutacao" | "mesclagem" | "random";
+    stepsCarrying: number;
+    totalEfficiencyBonus: number;
 
     constructor(
       x: number,
@@ -171,7 +173,9 @@
       this.genome = genome;
       this.id = Math.floor(Math.random() * 1e9);
       this.hasLeftBase = false;
-      this.formaDeNascimento = 'random';
+      this.formaDeNascimento = "random";
+      this.stepsCarrying = 0;
+      this.totalEfficiencyBonus = 0;
     }
     record() {
       this.trail.push({ x: this.x, y: this.y });
@@ -367,6 +371,7 @@
       this._updateAgentPhysics(agent, acc, rot, maxSpeed);
       this._handleCollisions(agent, world);
       agent.a += (rng.rand() - 0.5) * CONFIG.ACTIONS.RANDOM_ROTATION;
+      agent.a = GeometryUtils.normalizeAngle(agent.a);
       return { inputs, outputs: [acc, rot, mineOut], ...actionResult };
     }
 
@@ -399,7 +404,14 @@
           attemptedDeposit = true;
           agent.delivered++;
           agent.deliveries++;
+
+          // Bônus de eficiência: entregas rápidas valem mais
+          const cycleTime = agent.stepsCarrying;
+          const efficiencyBonus = Math.max(0, 1000 - cycleTime);
+          agent.totalEfficiencyBonus += efficiencyBonus;
+
           agent.state = "SEEK";
+          agent.stepsCarrying = 0; // Reseta contador
           justDeposited = true;
           world.stonesDelivered++;
           return { justPicked, justDeposited, attemptedMine, attemptedDeposit };
@@ -410,17 +422,24 @@
       if (wantsToMine) {
         attemptedMine = true;
         const nearStone = this._findNearStone(agent, world);
+
+        // Agente pode entrar em MINING quando quiser (comportamento do agente)
         if (nearStone && agent.state !== "CARRYING") {
           agent.state = "MINING";
           agent.mineTimer = (agent.mineTimer || 0) + 1;
+
+          // Ambiente só permite pegar pedra se NÃO estiver carregando
           if (agent.mineTimer >= CONFIG.AGENT.MINE_TIMER_BASE) {
             nearStone.quantity = Math.max(0, nearStone.quantity - 1);
             agent.state = "CARRYING";
             agent.hasMinedBefore = true;
             agent.mineTimer = 0;
+            agent.stepsCarrying = 0;
             justPicked = true;
           }
         } else {
+          // Quer minerar mas não tem pedra perto OU já está carregando
+          // Agente pode entrar em MINING de qualquer forma
           agent.state = "MINING";
         }
       } else {
@@ -459,6 +478,7 @@
         agent.v * CONFIG.PHYSICS.VELOCITY_DECAY +
         acc * maxSpeed * CONFIG.PHYSICS.ACCELERATION_FACTOR;
       agent.a += rot * CONFIG.PHYSICS.ROTATION_FACTOR;
+      agent.a = GeometryUtils.normalizeAngle(agent.a);
       agent.x += Math.cos(agent.a) * agent.v * this.phy_dt;
       agent.y += Math.sin(agent.a) * agent.v * this.phy_dt;
     }
@@ -544,7 +564,10 @@
     }
 
     buildPopulation() {
-      const popSize = this.debugMode ? 1 : 1 + clamp(this.lambda, this.minPopulation - 1, this.maxPopulation - 1);
+      const popSize = this.debugMode
+        ? 1
+        : 1 +
+          clamp(this.lambda, this.minPopulation - 1, this.maxPopulation - 1);
 
       localStorage.removeItem(this.storageKey);
       this.population = [];
@@ -566,14 +589,27 @@
       this.genStepCount++;
       for (const agent of this.population) {
         const info = this.stepAgent(agent, agent.genome, this.world, maxSpeed);
+
+        // Incrementa contador se estiver carregando
+        if (agent.state === "CARRYING") {
+          agent.stepsCarrying++;
+        }
+
         this._updateAgentFitness(agent, info);
         agent.age++;
         agent.record();
-        
-        if (agent === this.population[0] || agent.formaDeNascimento === 'elite') {
+
+        if (
+          agent === this.population[0] ||
+          agent.formaDeNascimento === "elite"
+        ) {
           this.lastStepResult = info;
         }
       }
+
+      // Verifica e respawna pedras que foram totalmente mineradas
+      this._checkAndRespawnStones();
+
       if (this.genStepCount >= this.stepsPerGen) {
         this.endGeneration();
       }
@@ -600,12 +636,37 @@
         agent.hasLeftBase = false;
     }
 
+    _checkAndRespawnStones(): void {
+      // Verifica cada pedra e respawna se necessário
+      for (let i = 0; i < this.world.stones.length; i++) {
+        const stone = this.world.stones[i];
+        if (stone.quantity <= 0) {
+          // Pedra esgotada - cria uma nova
+          const newStone = MapGenerator.respawnStone(
+            this.world.w,
+            this.world.h,
+            this.world.base,
+            this.world.obstacles,
+            this.world.stones,
+            stone.initialQuantity, // Mantém a quantidade inicial original
+            rng
+          );
+
+          if (newStone) {
+            // Substitui a pedra esgotada pela nova
+            this.world.stones[i] = newStone;
+          }
+        }
+      }
+    }
+
     endGeneration() {
       if (this.debugMode) {
         // No modo debug, apenas reseta o agente e regenera pedras
         const agent = this.population[0];
         if (agent) {
-          agent.x = this.world.base.x + this.world.base.r + 6 + rng.float(-6, 6);
+          agent.x =
+            this.world.base.x + this.world.base.r + 6 + rng.float(-6, 6);
           agent.y = this.world.base.y + rng.float(-6, 6);
           agent.a = rng.float(0, Math.PI * 2);
           agent.v = 0;
@@ -619,13 +680,16 @@
           agent.hasMinedBefore = false;
           agent.collisions = 0;
           agent.hasLeftBase = false;
+          agent.stepsCarrying = 0;
+          agent.totalEfficiencyBonus = 0;
         }
         this.generation++;
         this.regenStones(3);
         this.genStepCount = 0;
+        DOMManager.clearHistory();
         return;
       }
-      
+
       const evolutionResult = GeneticSystem.evolvePopulation(
         this.population,
         this.world,
@@ -645,6 +709,9 @@
       this.generation++;
       this.regenStones(this.population.length + 2);
       this.genStepCount = 0;
+
+      // Limpa histórico do debug ao iniciar nova geração
+      DOMManager.clearHistory();
 
       ChartManager.addFitnessPoint(
         this.generation,
@@ -683,9 +750,9 @@
     SIM.genSeconds = CONFIG.SIMULATION.GEN_SECONDS;
     SIM.stepsPerGen = CONFIG.SIMULATION.STEPS_PER_GEN;
     SIM.speed = CONFIG.SIMULATION.SPEED;
-    (window as any).SIM = SIM;
+    (window as unknown as WindowType).SIM = SIM;
     ChartManager.init();
-    DOMManager.setupInputs(); 
+    DOMManager.setupInputs();
     DOMManager.updateUI(SIM);
     SIM.initWorld();
     SIM.sanityCheck();
@@ -706,36 +773,66 @@
       SIM.debugMode = false;
       SIM.initWorld();
       DOMManager.updateUI(SIM);
-      
-      const debugPanel = document.getElementById('debugPanel');
-      const debugBtn = document.getElementById('btnDebug');
-      if (debugPanel) debugPanel.style.display = 'none';
-      if (debugBtn) debugBtn.classList.remove('active');
+
+      const debugPanel = document.getElementById("debugPanel");
+      const debugBtn = document.getElementById("btnDebug");
+      if (debugPanel) debugPanel.style.display = "none";
+      if (debugBtn) debugBtn.classList.remove("active");
     });
 
     UI.buttons.debug.addEventListener("click", () => {
       SIM.debugMode = !SIM.debugMode;
-      const debugPanel = document.getElementById('debugPanel');
-      const debugBtn = document.getElementById('btnDebug');
-      
+      const debugPanel = document.getElementById("debugPanel");
+      const debugBtn = document.getElementById("btnDebug");
+
       if (SIM.debugMode) {
-        debugBtn.classList.add('active');
-        debugPanel.style.display = 'block';
+        debugBtn.classList.add("active");
+        debugPanel.style.display = "block";
       } else {
-        debugBtn.classList.remove('active');
-        debugPanel.style.display = 'none';
+        debugBtn.classList.remove("active");
+        debugPanel.style.display = "none";
       }
-      
+
       SIM.buildPopulation();
       DOMManager.updateUI(SIM);
     });
 
+    UI.buttons.downloadDebug.addEventListener("click", () => {
+      const targetAgent = SIM.debugMode
+        ? SIM.population[0]
+        : SIM.population.find((a: Agent) => a.formaDeNascimento === "elite") ||
+          SIM.population[0];
+
+      if (targetAgent && SIM.lastStepResult) {
+        DOMManager.downloadDebugData(targetAgent, SIM.lastStepResult);
+      } else {
+        alert("Nenhum dado de debug disponível. Inicie a simulação primeiro.");
+      }
+    });
+
     UI.buttons.start.addEventListener("click", () => {
       SIM.running = true;
+      UI.buttons.start.textContent = "Running";
+      UI.buttons.pause.textContent = "Pause";
+    });
+
+    UI.buttons.pause.addEventListener("click", () => {
+      SIM.running = false;
+      UI.buttons.start.textContent = "Start";
+      UI.buttons.pause.textContent = "Paused";
     });
 
     window.addEventListener("keydown", (e) => {
-      if (e.code === "Space") SIM.running = !SIM.running;
+      if (e.code === "Space") {
+        SIM.running = !SIM.running;
+        if (SIM.running) {
+          UI.buttons.start.textContent = "Running";
+          UI.buttons.pause.textContent = "Pause";
+        } else {
+          UI.buttons.start.textContent = "Start";
+          UI.buttons.pause.textContent = "Paused";
+        }
+      }
       if (e.key === "n" || e.key === "N") {
         SIM.endGeneration();
         DOMManager.updateUI(SIM);

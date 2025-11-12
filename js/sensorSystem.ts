@@ -1,19 +1,50 @@
 const SensorSystemImpl = {
-  FIXED_RANGE: 150,
-  SENSOR_ANGLES: [-0.5, 0, 0.5], // Left, Front, Right
-
   calculateSensorData(
     agent: Agent,
     genome: Genome,
     world: World
   ): SensorData[] {
-
     const sensorData: SensorData[] = [];
 
-    for (let i = 0; i < 3; i++) {
-      const ang = agent.a + this.SENSOR_ANGLES[i];
-      const data = this._processSensor(agent, ang, this.FIXED_RANGE, world);
+    // Usa os sensores configurados no genoma (5 sensores com ângulos evoluídos)
+    for (let i = 0; i < genome.sensorAngles.length; i++) {
+      const ang = agent.a + genome.sensorAngles[i];
+      const data = this._processSensor(agent, ang, genome.sensorRange, world);
       sensorData.push(data);
+    }
+
+    // Atualiza memória do agente baseado no melhor sensor
+    // Prioriza pedras, depois base
+    let bestStone: StoneHit | null = null;
+    let bestBase: BaseHit | null = null;
+
+    for (const sensor of sensorData) {
+      if (sensor.stoneHit.stone) {
+        if (!bestStone || sensor.stoneHit.distance < bestStone.distance) {
+          bestStone = sensor.stoneHit;
+        }
+      }
+      if (sensor.baseHit.distance < Infinity) {
+        if (!bestBase || sensor.baseHit.distance < bestBase.distance) {
+          bestBase = sensor.baseHit;
+        }
+      }
+    }
+
+    if (bestStone) {
+      this._updateAgentMemory(
+        agent,
+        bestStone,
+        { distance: Infinity, signal: 0 },
+        world
+      );
+    } else if (bestBase) {
+      this._updateAgentMemory(
+        agent,
+        { distance: Infinity, stone: null, signal: 0 },
+        bestBase,
+        world
+      );
     }
 
     return sensorData;
@@ -21,6 +52,8 @@ const SensorSystemImpl = {
 
   /**
    * Extrai apenas inputs para rede neural
+   * 5 sensores × 3 valores = 15 inputs
+   * + 2 memória + 3 estado = 20 inputs total
    */
   extractInputs(
     sensorData: SensorData[],
@@ -30,14 +63,14 @@ const SensorSystemImpl = {
     const inputs = new Array(20).fill(0);
     let idx = 0;
 
-    // Dados dos sensores (3 por sensor)
+    // Dados dos sensores (3 valores por sensor = 15 inputs)
     for (const sensor of sensorData) {
       inputs[idx++] = sensor.proximity;
       inputs[idx++] = sensor.stoneSignal;
       inputs[idx++] = sensor.baseSignal;
     }
 
-    // Memória + estado interno
+    // Memória + estado interno (5 inputs)
     inputs[idx++] =
       agent.lastSeen.angle == null
         ? 0
@@ -245,8 +278,8 @@ const SensorSystemImpl = {
       sensor.stoneHit.distance <= sensor.endDistance
         ? "#ffd89b"
         : sensor.baseHit.distance <= sensor.endDistance
-        ? "#bdf7c7"
-        : "rgba(200,220,255,0.06)";
+          ? "#bdf7c7"
+          : "rgba(200,220,255,0.06)";
     ctx.lineWidth = 1;
     ctx.stroke();
   },
@@ -277,5 +310,5 @@ const SensorSystemImpl = {
 };
 
 if (typeof window !== "undefined") {
-  (window as any).SensorSystem = SensorSystemImpl;
+  (window as unknown as WindowType).SensorSystem = SensorSystemImpl;
 }

@@ -82,17 +82,17 @@ const RendererImpl = {
 
     this.drawEnvironment(ctx, world);
     this.drawAgents(ctx, population);
-    
+
     // Desenha sensores no modo debug
     if (sim.debugMode && population[0]) {
       this.drawSensors(ctx, population[0]);
     }
-    
+
     // Desenha linha de rastreamento para agente do debug
     if (sim.trackedAgent) {
       this.drawTrackingLine(ctx, sim.trackedAgent, sim.canvas);
     }
-    
+
     this.drawUI(ctx, sim);
     this.drawCameraInfo(ctx);
   },
@@ -120,114 +120,241 @@ const RendererImpl = {
       ctx.stroke();
     }
 
-    // Obstáculos (cubos 3D)
-    ctx.fillStyle = "#2b2f37";
-    ctx.strokeStyle = "#444";
+    // Calcula profundidade de todos os objetos para ordenação
+    const renderQueue = this.buildRenderQueue(world);
+
+    // Renderiza objetos em ordem de profundidade
+    for (const item of renderQueue) {
+      if (item.type === "obstacle") {
+        this.drawObstacle(ctx, item.data as Rect, item.depth);
+      } else if (item.type === "stone") {
+        this.drawStone(ctx, item.data as Stone, item.depth, world.obstacles);
+      } else if (item.type === "base") {
+        this.drawBase(ctx, item.data as Base, world.stonesDelivered);
+      }
+    }
+  },
+
+  // Constrói fila de renderização ordenada por profundidade
+  buildRenderQueue(
+    world: World
+  ): Array<{ type: string; data: any; depth: number }> {
+    const queue = [];
+
+    // Adiciona obstáculos
     for (const ob of world.obstacles) {
-      const height = 30;
-      const corners = [
-        this.project3D(ob.x, ob.y),
-        this.project3D(ob.x + ob.w, ob.y),
-        this.project3D(ob.x + ob.w, ob.y + ob.h),
-        this.project3D(ob.x, ob.y + ob.h),
-        this.project3D(ob.x, ob.y, height),
-        this.project3D(ob.x + ob.w, ob.y, height),
-        this.project3D(ob.x + ob.w, ob.y + ob.h, height),
-        this.project3D(ob.x, ob.y + ob.h, height),
-      ];
-
-      // Face superior
-      ctx.beginPath();
-      ctx.moveTo(corners[4].x, corners[4].y);
-      ctx.lineTo(corners[5].x, corners[5].y);
-      ctx.lineTo(corners[6].x, corners[6].y);
-      ctx.lineTo(corners[7].x, corners[7].y);
-      ctx.closePath();
-      ctx.fillStyle = "#3a3f47";
-      ctx.fill();
-      ctx.stroke();
-
-      // Face direita
-      ctx.beginPath();
-      ctx.moveTo(corners[1].x, corners[1].y);
-      ctx.lineTo(corners[5].x, corners[5].y);
-      ctx.lineTo(corners[6].x, corners[6].y);
-      ctx.lineTo(corners[2].x, corners[2].y);
-      ctx.closePath();
-      ctx.fillStyle = "#2b2f37";
-      ctx.fill();
-      ctx.stroke();
-
-      // Face esquerda
-      ctx.beginPath();
-      ctx.moveTo(corners[0].x, corners[0].y);
-      ctx.lineTo(corners[4].x, corners[4].y);
-      ctx.lineTo(corners[7].x, corners[7].y);
-      ctx.lineTo(corners[3].x, corners[3].y);
-      ctx.closePath();
-      ctx.fillStyle = "#1f2329";
-      ctx.fill();
-      ctx.stroke();
+      queue.push({
+        type: "obstacle",
+        data: ob,
+        depth: ob.y + ob.x + ob.h, // Profundidade isométrica
+      });
     }
 
-    // Pedras (esferas 3D)
+    // Adiciona pedras
     for (const s of world.stones) {
-      const pos = this.project3D(s.x, s.y, s.r);
-
-      // Sombra
-      const shadowPos = this.project3D(s.x + 2, s.y + 2);
-      ctx.beginPath();
-      ctx.fillStyle = "rgba(0,0,0,0.3)";
-      ctx.ellipse(
-        shadowPos.x,
-        shadowPos.y,
-        s.r * 0.8,
-        s.r * 0.4,
-        0,
-        0,
-        Math.PI * 2
-      );
-      ctx.fill();
-
-      // Esfera principal
-      ctx.beginPath();
-      ctx.fillStyle = s.quantity > 0 ? "#a9a089" : "#444";
-      ctx.arc(pos.x, pos.y, s.r, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Highlight 3D
-      ctx.beginPath();
-      ctx.fillStyle = s.quantity > 0 ? "#c4c0a5" : "#666";
-      ctx.arc(pos.x - s.r * 0.3, pos.y - s.r * 0.3, s.r * 0.4, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.strokeStyle = "#111";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, s.r, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Texto
-      ctx.fillStyle = "#dff";
-      ctx.font = "12px monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(s.quantity.toString(), pos.x, pos.y);
+      queue.push({
+        type: "stone",
+        data: s,
+        depth: s.y + s.x,
+      });
     }
 
-    // Base (cilindro 3D)
-    const basePos = this.project3D(world.base.x, world.base.y);
-    const basePosTop = this.project3D(world.base.x, world.base.y, 15);
+    // Adiciona base
+    queue.push({
+      type: "base",
+      data: world.base,
+      depth: world.base.y + world.base.x,
+    });
+
+    // Ordena por profundidade (mais distante primeiro)
+    return queue.sort((a, b) => a.depth - b.depth);
+  },
+
+  // Desenha obstáculo com melhor definição 3D
+  drawObstacle(ctx: CanvasRenderingContext2D, ob: Rect, _depth: number): void {
+    const height = 40 + (ob.w + ob.h) * 0.15; // Altura variável baseada no tamanho
+
+    const corners = [
+      this.project3D(ob.x, ob.y),
+      this.project3D(ob.x + ob.w, ob.y),
+      this.project3D(ob.x + ob.w, ob.y + ob.h),
+      this.project3D(ob.x, ob.y + ob.h),
+      this.project3D(ob.x, ob.y, height),
+      this.project3D(ob.x + ob.w, ob.y, height),
+      this.project3D(ob.x + ob.w, ob.y + ob.h, height),
+      this.project3D(ob.x, ob.y + ob.h, height),
+    ];
+
+    // Sombra do obstáculo
+    const shadowCorners = [
+      this.project3D(ob.x + 3, ob.y + 3),
+      this.project3D(ob.x + ob.w + 3, ob.y + 3),
+      this.project3D(ob.x + ob.w + 3, ob.y + ob.h + 3),
+      this.project3D(ob.x + 3, ob.y + ob.h + 3),
+    ];
+    ctx.beginPath();
+    ctx.moveTo(shadowCorners[0].x, shadowCorners[0].y);
+    ctx.lineTo(shadowCorners[1].x, shadowCorners[1].y);
+    ctx.lineTo(shadowCorners[2].x, shadowCorners[2].y);
+    ctx.lineTo(shadowCorners[3].x, shadowCorners[3].y);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fill();
+
+    // Face FRONTAL (parede y=menor, mais próxima)
+    // Liga base frontal com topo frontal
+    ctx.beginPath();
+    ctx.moveTo(corners[0].x, corners[0].y);
+    ctx.lineTo(corners[1].x, corners[1].y);
+    ctx.lineTo(corners[5].x, corners[5].y);
+    ctx.lineTo(corners[4].x, corners[4].y);
+    ctx.closePath();
+    ctx.fillStyle = "#2f3540";
+    ctx.fill();
+    ctx.strokeStyle = "#1f2329";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Face ESQUERDA (parede x=menor)
+    ctx.beginPath();
+    ctx.moveTo(corners[0].x, corners[0].y);
+    ctx.lineTo(corners[4].x, corners[4].y);
+    ctx.lineTo(corners[7].x, corners[7].y);
+    ctx.lineTo(corners[3].x, corners[3].y);
+    ctx.closePath();
+    ctx.fillStyle = "#1a1e24";
+    ctx.fill();
+    ctx.strokeStyle = "#0d0f12";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Face DIREITA (parede x=maior)
+    ctx.beginPath();
+    ctx.moveTo(corners[1].x, corners[1].y);
+    ctx.lineTo(corners[2].x, corners[2].y);
+    ctx.lineTo(corners[6].x, corners[6].y);
+    ctx.lineTo(corners[5].x, corners[5].y);
+    ctx.closePath();
+    ctx.fillStyle = "#2a2f37";
+    ctx.fill();
+    ctx.strokeStyle = "#1a1e24";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Face TRASEIRA (parede y=maior, mais distante)
+    ctx.beginPath();
+    ctx.moveTo(corners[2].x, corners[2].y);
+    ctx.lineTo(corners[3].x, corners[3].y);
+    ctx.lineTo(corners[7].x, corners[7].y);
+    ctx.lineTo(corners[6].x, corners[6].y);
+    ctx.closePath();
+    ctx.fillStyle = "#1f2329";
+    ctx.fill();
+    ctx.strokeStyle = "#0f1216";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Face SUPERIOR (topo do cubo - mais clara)
+    ctx.beginPath();
+    ctx.moveTo(corners[4].x, corners[4].y);
+    ctx.lineTo(corners[5].x, corners[5].y);
+    ctx.lineTo(corners[6].x, corners[6].y);
+    ctx.lineTo(corners[7].x, corners[7].y);
+    ctx.closePath();
+    ctx.fillStyle = "#3d4450";
+    ctx.fill();
+    ctx.strokeStyle = "#2a2f37";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Highlight nas arestas superiores para dar mais volume
+    ctx.beginPath();
+    ctx.moveTo(corners[4].x, corners[4].y);
+    ctx.lineTo(corners[5].x, corners[5].y);
+    ctx.strokeStyle = "rgba(100, 110, 130, 0.6)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  },
+
+  // Desenha pedra com tamanho proporcional à quantidade inicial
+  drawStone(
+    ctx: CanvasRenderingContext2D,
+    s: Stone,
+    _depth: number,
+    _obstacles: Rect[]
+  ): void {
+    // Calcula raio baseado na quantidade inicial (8 a 16 pixels)
+    const visualRadius = 14 + (s.initialQuantity / 10);
+    const pos = this.project3D(s.x, s.y, visualRadius);
+
+    // Sombra
+    const shadowPos = this.project3D(s.x + 2, s.y + 2);
+    ctx.beginPath();
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.ellipse(
+      shadowPos.x,
+      shadowPos.y,
+      visualRadius * 0.8,
+      visualRadius * 0.4,
+      0,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+
+    // Esfera principal - apenas 2 cores: com recursos ou sem recursos
+    ctx.beginPath();
+    const baseColor = s.quantity > 0 ? "#a9a089" : "#444";
+    ctx.fillStyle = baseColor;
+    ctx.arc(pos.x, pos.y, visualRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Highlight 3D
+    ctx.beginPath();
+    const highlightColor = s.quantity > 0 ? "#c4c0a5" : "#666";
+    ctx.fillStyle = highlightColor;
+    ctx.arc(
+      pos.x - visualRadius * 0.3,
+      pos.y - visualRadius * 0.3,
+      visualRadius * 0.4,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+
+    // Borda preta
+    ctx.strokeStyle = "#111";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, visualRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Texto com quantidade atual
+    ctx.fillStyle = "#dff";
+    ctx.font = "12px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(s.quantity.toString(), pos.x, pos.y);
+  },
+
+  // Desenha base
+  drawBase(
+    ctx: CanvasRenderingContext2D,
+    base: Base,
+    stonesDelivered: number
+  ): void {
+    const basePos = this.project3D(base.x, base.y);
+    const basePosTop = this.project3D(base.x, base.y, 15);
 
     // Sombra da base
-    const baseShadow = this.project3D(world.base.x + 3, world.base.y + 3);
+    const baseShadow = this.project3D(base.x + 3, base.y + 3);
     ctx.beginPath();
     ctx.fillStyle = "rgba(0,0,0,0.4)";
     ctx.ellipse(
       baseShadow.x,
       baseShadow.y,
-      world.base.r * 0.9,
-      world.base.r * 0.5,
+      base.r * 0.9,
+      base.r * 0.5,
       0,
       0,
       Math.PI * 2
@@ -237,15 +364,7 @@ const RendererImpl = {
     // Lateral do cilindro
     ctx.beginPath();
     ctx.fillStyle = "#660000";
-    ctx.ellipse(
-      basePos.x,
-      basePos.y,
-      world.base.r,
-      world.base.r * 0.5,
-      0,
-      0,
-      Math.PI * 2
-    );
+    ctx.ellipse(basePos.x, basePos.y, base.r, base.r * 0.5, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Topo do cilindro
@@ -254,8 +373,8 @@ const RendererImpl = {
     ctx.ellipse(
       basePosTop.x,
       basePosTop.y,
-      world.base.r,
-      world.base.r * 0.5,
+      base.r,
+      base.r * 0.5,
       0,
       0,
       Math.PI * 2
@@ -271,7 +390,7 @@ const RendererImpl = {
     ctx.font = "14px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(world.stonesDelivered.toString(), basePosTop.x, basePosTop.y);
+    ctx.fillText(stonesDelivered.toString(), basePosTop.x, basePosTop.y);
   },
 
   drawAgents(ctx: CanvasRenderingContext2D, population: Agent[]): void {
@@ -292,11 +411,11 @@ const RendererImpl = {
       ctx.fill();
 
       const colors = {
-        "SEEK": "#58a6ff",
-        "MINING": "#ff9a4d", 
-        "CARRYING": "#2fd28f"
+        SEEK: "#58a6ff",
+        MINING: "#ff9a4d",
+        CARRYING: "#2fd28f",
       };
-      let col = colors[a.state];
+      const col = colors[a.state];
 
       // Corpo do agente (esfera)
       ctx.beginPath();
@@ -331,14 +450,14 @@ const RendererImpl = {
 
     // Destaca elites
     for (const a of population) {
-      if (a.formaDeNascimento === 'elite') {
+      if (a.formaDeNascimento === "elite") {
         const elitePos = this.project3D(a.x, a.y, 8);
         ctx.beginPath();
         ctx.strokeStyle = "#ffd700";
         ctx.lineWidth = 3;
         ctx.arc(elitePos.x, elitePos.y, 12, 0, Math.PI * 2);
         ctx.stroke();
-        
+
         // Anel duplo para elites
         ctx.beginPath();
         ctx.strokeStyle = "#ffff00";
@@ -347,7 +466,7 @@ const RendererImpl = {
         ctx.stroke();
       }
     }
-    
+
     // Destaca campeão
     if (population[0]) {
       const champPos = this.project3D(population[0].x, population[0].y, 8);
@@ -422,39 +541,42 @@ const RendererImpl = {
         const angle = agent.a + sensor.angle;
         const maxRange = sensor.range;
         const hitDistance = sensor.endDistance;
-        
+
         // Linha do sensor até o alcance máximo
         const maxX = Math.cos(angle) * maxRange;
         const maxY = Math.sin(angle) * maxRange;
-        
+
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.lineTo(maxX, maxY);
-        ctx.strokeStyle = 'rgba(100, 100, 100, 0.3)';
+        ctx.strokeStyle = "rgba(100, 100, 100, 0.3)";
         ctx.lineWidth = 1;
         ctx.stroke();
-        
+
         // Linha até o ponto de colisão
         if (hitDistance < maxRange) {
           const hitX = Math.cos(angle) * hitDistance;
           const hitY = Math.sin(angle) * hitDistance;
-          
+
           ctx.beginPath();
           ctx.moveTo(0, 0);
           ctx.lineTo(hitX, hitY);
           ctx.strokeStyle = `rgba(255, 255, 0, ${0.5 + sensor.proximity * 0.5})`;
           ctx.lineWidth = 2;
           ctx.stroke();
-          
+
           // Ponto de colisão
           ctx.beginPath();
-          ctx.fillStyle = sensor.stoneSignal > 0 ? 'rgba(255, 165, 0, 0.8)' : 
-                         sensor.baseSignal > 0 ? 'rgba(255, 0, 0, 0.8)' : 
-                         'rgba(255, 255, 0, 0.8)';
+          ctx.fillStyle =
+            sensor.stoneSignal > 0
+              ? "rgba(255, 165, 0, 0.8)"
+              : sensor.baseSignal > 0
+                ? "rgba(255, 0, 0, 0.8)"
+                : "rgba(255, 255, 0, 0.8)";
           ctx.arc(hitX, hitY, 3, 0, Math.PI * 2);
           ctx.fill();
         }
-        
+
         // Cone de detecção
         const coneAngle = Math.PI / 12; // 15 graus
         ctx.beginPath();
@@ -469,27 +591,31 @@ const RendererImpl = {
     }
   },
 
-  drawTrackingLine(ctx: CanvasRenderingContext2D, agent: Agent, canvas: HTMLCanvasElement): void {
+  drawTrackingLine(
+    ctx: CanvasRenderingContext2D,
+    agent: Agent,
+    canvas: HTMLCanvasElement
+  ): void {
     const agentPos = this.project3D(agent.x, agent.y, 8);
     const targetX = canvas.width;
     const targetY = canvas.height;
-    
+
     ctx.save();
     ctx.strokeStyle = "rgba(255, 215, 0, 0.8)";
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 5]);
-    
+
     ctx.beginPath();
     ctx.moveTo(agentPos.x, agentPos.y);
     ctx.lineTo(targetX, targetY);
     ctx.stroke();
-    
+
     // Ponto no canto
     ctx.fillStyle = "rgba(255, 215, 0, 0.9)";
     ctx.beginPath();
     ctx.arc(targetX - 10, targetY - 10, 5, 0, Math.PI * 2);
     ctx.fill();
-    
+
     ctx.restore();
   },
 
@@ -509,5 +635,5 @@ const RendererImpl = {
 };
 
 if (typeof window !== "undefined") {
-  (window as any).Renderer = RendererImpl;
+  (window as unknown as WindowType).Renderer = RendererImpl;
 }

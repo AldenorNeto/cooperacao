@@ -20,6 +20,7 @@ interface Base extends Circle {}
 
 interface Stone extends Circle {
   quantity: number;
+  initialQuantity: number; // Quantidade inicial para calcular tamanho visual
 }
 
 interface Agent extends Point {
@@ -50,7 +51,9 @@ interface Agent extends Point {
   wrongMineAttempts?: number;
   detailedScore?: MultiObjectiveMetrics;
   hasLeftBase: boolean;
-  formaDeNascimento?: 'elite' | 'mutacao' | 'mesclagem' | 'random';
+  formaDeNascimento?: "elite" | "mutacao" | "mesclagem" | "random";
+  stepsCarrying: number;
+  totalEfficiencyBonus: number;
   record(): void;
 }
 
@@ -143,6 +146,7 @@ declare const GeometryUtils: {
     cy: number,
     cr: number
   ): number | null;
+  normalizeAngle(angle: number): number;
 };
 
 declare const SensorSystem: {
@@ -315,10 +319,12 @@ interface ChartManagerInterface {
 // ----- DOMManager -----
 interface DOMButtons {
   start: HTMLElement | null;
+  pause: HTMLElement | null;
   reset: HTMLElement | null;
   save: HTMLElement | null;
   load: HTMLElement | null;
   debug: HTMLElement | null;
+  downloadDebug: HTMLElement | null;
 }
 
 interface ConfigDisplayElements {
@@ -389,23 +395,66 @@ interface SimulationView {
   buildPopulation?(): void;
 }
 
+interface SimpleDOMElements {
+  canvas: HTMLCanvasElement;
+  buttons: {
+    start: HTMLElement;
+    pause: HTMLElement;
+    reset: HTMLElement;
+    debug: HTMLElement;
+    downloadDebug: HTMLElement;
+  };
+  rangeControls: {
+    speedRange: HTMLInputElement;
+    speedValue: HTMLElement;
+    genTimeRange: HTMLInputElement;
+    genTimeValue: HTMLElement;
+    stepsRange: HTMLInputElement;
+    stepsValue: HTMLElement;
+  };
+  stonesDelivered: HTMLElement;
+  debugPanel: HTMLElement;
+  debugElements: {
+    agentPos: HTMLElement;
+    agentAngle: HTMLElement;
+    agentVel: HTMLElement;
+    agentState: HTMLElement;
+    agentCarry: HTMLElement;
+    agentFitness: HTMLElement;
+    sensorValues: HTMLElement;
+    networkInputs: HTMLElement;
+    networkOutputs: HTMLElement;
+    neuralCanvas: HTMLCanvasElement;
+    historyCanvas: HTMLCanvasElement;
+  };
+}
+
+interface HistoryPoint {
+  step: number;
+  agentAngle: number;
+  memoryAngle: number;
+  memoryDist: number;
+}
+
 interface DOMManagerInterface {
-  elements: DOMElements | null;
+  elements: SimpleDOMElements | null;
+  history: HistoryPoint[];
+  maxHistoryPoints: number;
+  sampleInterval: number;
 
-  init(): DOMElements | null;
+  init(): SimpleDOMElements | null;
   resizeCanvas(): void;
-  updateUI(sim: SimulationView): void;
-  setupInputs?(sim?: SimulationView): void;
-
-  drawRedText(ctx: CanvasRenderingContext2D, msg: string): void;
-  drawUI(ctx: CanvasRenderingContext2D, sim: SimulationView): void;
-  drawEnvironment(ctx: CanvasRenderingContext2D, world: World): void;
-  drawAgents(
-    ctx: CanvasRenderingContext2D,
-    pop: Agent[],
-    sim: SimulationView,
-    world: World
+  setupInputs(): void;
+  updateUI(sim: Simulation): void;
+  updateDebugInfo(agent: Agent, stepResult: StepResult): void;
+  updateHistory(
+    agent: Agent,
+    stepResult: StepResult,
+    currentStep: number
   ): void;
+  drawHistoryChart(): void;
+  clearHistory(): void;
+  downloadDebugData(agent: Agent, stepResult: StepResult): void;
 }
 
 // ----- Simulation (completa o suficiente para tipagem) -----
@@ -437,10 +486,6 @@ interface Simulation {
   storageKey: string;
 
   // principais métodos públicos usados pelo app
-  constructor(
-    canvas: HTMLCanvasElement,
-    ctx: CanvasRenderingContext2D
-  ): Simulation;
   stepAgent(
     agent: Agent,
     genome: Genome,
@@ -467,6 +512,15 @@ declare const MapGenerator: {
     minTotalQuantity: number,
     rng: RNG
   ): Stone[];
+  respawnStone(
+    w: number,
+    h: number,
+    base: Base,
+    obstacles: Rect[],
+    existingStones: Stone[],
+    initialQuantity: number,
+    rng: RNG
+  ): Stone | null;
 };
 
 declare const Renderer: {
@@ -532,6 +586,18 @@ declare const CONFIG: {
   };
 };
 
+// ----- DebugSystem -----
+interface DebugSystemInterface {
+  isActive: boolean;
+  toggle(sim: Simulation | SimulationView): void;
+  reset(): void;
+  updateAgentInfo(agent: Agent): void;
+  updateSensorInfo(sensorData: SensorData[]): void;
+  updateNetworkInfo(inputs: number[], outputs: number[]): void;
+  drawNeuralNetwork(genome: Genome, inputs: number[], outputs: number[]): void;
+  update(agent: Agent, stepResult: StepResult): void;
+}
+
 // ----- Extensões globais da Window -----
 declare global {
   interface Window {
@@ -539,14 +605,32 @@ declare global {
     ChartManager: ChartManagerInterface;
     RewardSystem: RewardSystemInterface;
     GeneticSystem: GeneticSystemInterface;
+    DebugSystem: DebugSystemInterface;
     MapGenerator: typeof MapGenerator;
     GeometryUtils: typeof GeometryUtils;
     Renderer: typeof Renderer;
     MemorySystem: typeof MemorySystem;
+    SensorSystem: typeof SensorSystem;
     SIM: Simulation | null;
     CONFIG: typeof CONFIG;
   }
 }
+
+// ----- Tipo auxiliar para substituir (window as any) -----
+type WindowWithSystems = Window & {
+  DOMManager: DOMManagerInterface;
+  ChartManager: ChartManagerInterface;
+  RewardSystem: RewardSystemInterface;
+  GeneticSystem: GeneticSystemInterface;
+  DebugSystem: DebugSystemInterface;
+  MapGenerator: typeof MapGenerator;
+  GeometryUtils: typeof GeometryUtils;
+  Renderer: typeof Renderer;
+  MemorySystem: typeof MemorySystem;
+  SensorSystem: typeof SensorSystem;
+  SIM: Simulation | null;
+  CONFIG: typeof CONFIG;
+};
 // declare global singletons (para o TS aceitar usar DOMManager, ChartManager, etc. como identificadores)
 declare const DOMManager: DOMManagerInterface;
 declare const ChartManager: ChartManagerInterface;
@@ -563,6 +647,15 @@ declare const MapGenerator: {
     minTotalQuantity: number,
     rng: RNG
   ): Stone[];
+  respawnStone(
+    w: number,
+    h: number,
+    base: Base,
+    obstacles: Rect[],
+    existingStones: Stone[],
+    initialQuantity: number,
+    rng: RNG
+  ): Stone | null;
 };
 
 declare const Renderer: {
@@ -588,6 +681,7 @@ declare const GeometryUtils: {
     cy: number,
     cr: number
   ): number | null;
+  normalizeAngle(angle: number): number;
 };
 
 declare const MemorySystem: {
@@ -646,3 +740,18 @@ declare const CONFIG: {
     RANDOM_ROTATION: number;
   };
 };
+
+interface WindowType {
+  ChartManager?: ChartManagerInterface;
+  DebugSystem?: DebugSystemInterface;
+  SIM?: Simulation | null;
+  DOMManager?: DOMManagerInterface;
+  MapGenerator?: typeof MapGenerator;
+  MemorySystem?: typeof MemorySystem;
+  Renderer?: typeof Renderer;
+  RewardSystem?: RewardSystemInterface;
+  SensorSystem?: typeof SensorSystem;
+  GeometryUtils?: typeof GeometryUtils;
+  CONFIG?: typeof CONFIG;
+  GeneticSystem?: GeneticSystemInterface;
+}

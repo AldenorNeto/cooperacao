@@ -10,7 +10,13 @@ body {
   height: 100%;
   margin: 0;
   background: linear-gradient(180deg, #07101a, #08131a);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+  font-family:
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Helvetica,
+    Arial;
 }
 
 #app {
@@ -65,7 +71,17 @@ button.ghost {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+button:hover {
+  opacity: 0.9;
+}
 
+button:active {
+  transform: scale(0.98);
+}
+
+#btnPause {
+  background: #f85149;
+}
 
 label {
   font-size: 12px;
@@ -137,8 +153,6 @@ textarea {
   overflow: auto;
   max-height: 140px;
 }
-
-
 
 /* Chart Styles */
 .chart-section {
@@ -239,6 +253,25 @@ button.debug.active {
   text-align: center;
 }
 
+.btn-download {
+  padding: 4px 8px;
+  font-size: 11px;
+  background: #238636;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-download:hover {
+  background: #2ea043;
+}
+
+.btn-download:active {
+  transform: scale(0.95);
+}
+
 .debug-panel h5 {
   margin: 8px 0 6px 0;
   color: #58a6ff;
@@ -268,19 +301,29 @@ button.debug.active {
   font-weight: bold;
 }
 
-#sensorValues, #networkInputs, #networkOutputs {
+#sensorValues,
+#networkInputs,
+#networkOutputs {
   font-family: ui-monospace, monospace;
   font-size: 10px;
   line-height: 1.3;
 }
 
-.sensor-item, .network-item {
+.sensor-item,
+.network-item {
   display: flex;
   justify-content: space-between;
   margin-bottom: 2px;
   padding: 2px 4px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 3px;
+  font-size: 10px;
+}
+
+.sensor-item span:first-child,
+.network-item span:first-child {
+  color: #9aa6b2;
+  min-width: 70px;
 }
 
 .sensor-active {
@@ -289,6 +332,15 @@ button.debug.active {
 
 .network-high {
   background: rgba(0, 255, 0, 0.2) !important;
+}
+
+#sensorValues strong,
+#networkInputs strong,
+#networkOutputs strong {
+  color: #58a6ff;
+  font-size: 11px;
+  display: block;
+  margin-bottom: 4px;
 }
 
 #neuralCanvas {

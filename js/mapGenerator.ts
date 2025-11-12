@@ -11,29 +11,125 @@ const MapGeneratorImpl = {
   },
 
   /**
-   * Gera obstáculos usando grid + jitter
+   * Gera obstáculos com melhor distribuição e tamanhos variados
    */
   generateObstacles(w: number, h: number, base: Base, rng: RNG): Rect[] {
-    const oCount = 6 + rng.int(7);
-    const obstacles = [];
-    const gridCols = Math.ceil(Math.sqrt(oCount * 2));
-    const gridRows = Math.ceil(oCount / gridCols);
-    const cellW = w / gridCols;
-    const cellH = h / gridRows;
+    const obstacles: Rect[] = [];
+    const oCount = 8 + rng.int(6); // 8-13 obstáculos
 
-    for (let i = 0; i < oCount; i++) {
-      const col = i % gridCols;
-      const row = Math.floor(i / gridCols);
+    // Define zonas de exclusão ao redor da base
+    const baseExclusionRadius = base.r * 4;
 
-      const ow = 40 + rng.float(0, 120);
-      const oh = 30 + rng.float(0, 100);
+    // Cria clusters de obstáculos para layout mais interessante
+    const clusterCount = 3 + rng.int(3); // 3-5 clusters
+    const clusters: Array<{ x: number; y: number }> = [];
 
-      // Grid position + jitter
-      const ox = col * cellW + rng.float(0, cellW - ow);
-      const oy = row * cellH + rng.float(0, cellH - oh);
+    for (let c = 0; c < clusterCount; c++) {
+      let cx: number, cy: number;
+      let attempts = 0;
 
-      // Skip if overlaps base
-      if (!this._rectCircleOverlap({ x: ox, y: oy, w: ow, h: oh }, base)) {
+      // Encontra posição válida para cluster
+      do {
+        cx = 100 + rng.float(0, w - 200);
+        cy = 100 + rng.float(0, h - 200);
+        attempts++;
+      } while (
+        this._distance(cx, cy, base.x, base.y) < baseExclusionRadius * 2 &&
+        attempts < 20
+      );
+
+      clusters.push({ x: cx, y: cy });
+    }
+
+    // Distribui obstáculos entre clusters
+    const obstaclesPerCluster = Math.floor(oCount / clusterCount);
+    const remainder = oCount % clusterCount;
+
+    for (let c = 0; c < clusterCount; c++) {
+      const cluster = clusters[c];
+      const count = obstaclesPerCluster + (c < remainder ? 1 : 0);
+
+      for (let i = 0; i < count; i++) {
+        // Tamanhos variados: pequenos, médios e grandes
+        const sizeType = rng.float(0, 1);
+        let ow: number, oh: number;
+
+        if (sizeType < 0.3) {
+          // Pequenos (30%)
+          ow = 30 + rng.float(0, 40);
+          oh = 30 + rng.float(0, 40);
+        } else if (sizeType < 0.7) {
+          // Médios (40%)
+          ow = 50 + rng.float(0, 60);
+          oh = 50 + rng.float(0, 60);
+        } else {
+          // Grandes (30%)
+          ow = 80 + rng.float(0, 80);
+          oh = 80 + rng.float(0, 80);
+        }
+
+        // Alguns obstáculos mais retangulares
+        if (rng.float(0, 1) < 0.4) {
+          if (rng.float(0, 1) < 0.5) {
+            ow *= 1.5; // Horizontal
+          } else {
+            oh *= 1.5; // Vertical
+          }
+        }
+
+        // Posição dentro do cluster com dispersão
+        const spreadRadius = 120;
+        const angle = rng.float(0, Math.PI * 2);
+        const distance = rng.float(0, spreadRadius);
+
+        const ox = cluster.x + Math.cos(angle) * distance;
+        const oy = cluster.y + Math.sin(angle) * distance;
+
+        // Garante que está dentro dos limites
+        const clampedX = this._clamp(ox, 20, w - ow - 20);
+        const clampedY = this._clamp(oy, 20, h - oh - 20);
+
+        const newObstacle = { x: clampedX, y: clampedY, w: ow, h: oh };
+
+        // Verifica colisões
+        const tooCloseToBase =
+          this._distance(clampedX + ow / 2, clampedY + oh / 2, base.x, base.y) <
+          baseExclusionRadius;
+
+        const overlapsOther = obstacles.some((o) =>
+          this._rectOverlapWithMargin(newObstacle, o, 10)
+        );
+
+        if (!tooCloseToBase && !overlapsOther) {
+          obstacles.push(newObstacle);
+        }
+      }
+    }
+
+    // Adiciona alguns obstáculos isolados para variedade
+    const isolatedCount = 2 + rng.int(3);
+    for (let i = 0; i < isolatedCount; i++) {
+      const ow = 40 + rng.float(0, 60);
+      const oh = 40 + rng.float(0, 60);
+
+      let ox: number = 0,
+        oy: number = 0;
+      let attempts = 0;
+
+      do {
+        ox = 50 + rng.float(0, w - ow - 100);
+        oy = 50 + rng.float(0, h - oh - 100);
+        attempts++;
+      } while (
+        attempts < 30 &&
+        (this._distance(ox + ow / 2, oy + oh / 2, base.x, base.y) <
+          baseExclusionRadius ||
+          obstacles.some((o) =>
+            this._rectOverlapWithMargin({ x: ox, y: oy, w: ow, h: oh }, o, 15)
+          ))
+      );
+
+      if (attempts < 30) {
         obstacles.push({ x: ox, y: oy, w: ow, h: oh });
       }
     }
@@ -62,7 +158,7 @@ const MapGeneratorImpl = {
     for (let i = 0; i < sCount; i++) {
       const col = i % gridCols;
       const row = Math.floor(i / gridCols);
-      const r = 10 + rng.float(0, 6);
+      const r = 12; // Tamanho fixo para todas as pedras
 
       // Grid position + jitter
       const x = col * cellW + cellW / 2 + rng.float(-cellW * 0.3, cellW * 0.3);
@@ -74,7 +170,7 @@ const MapGeneratorImpl = {
         this._distance(x, y, base.x, base.y) >= minDistFromBase &&
         !obstacles.some((o) => this._rectCircleOverlap(o, { x, y, r }))
       ) {
-        const quantity = 1 + rng.int(80);
+        const quantity = 12 + rng.int(80);
         const clampedX = this._clamp(x, 40, w - 40);
         const clampedY = this._clamp(y, 40, h - 40);
 
@@ -82,7 +178,13 @@ const MapGeneratorImpl = {
         if (
           this._distance(clampedX, clampedY, base.x, base.y) >= minDistFromBase
         ) {
-          stones.push({ x: clampedX, y: clampedY, r, quantity });
+          stones.push({
+            x: clampedX,
+            y: clampedY,
+            r,
+            quantity,
+            initialQuantity: quantity,
+          });
         }
       }
     }
@@ -138,6 +240,60 @@ const MapGeneratorImpl = {
     }
   },
 
+  /**
+   * Cria uma nova pedra em posição válida quando uma é totalmente minerada
+   */
+  respawnStone(
+    w: number,
+    h: number,
+    base: Base,
+    obstacles: Rect[],
+    existingStones: Stone[],
+    initialQuantity: number,
+    rng: RNG
+  ): Stone | null {
+    const r = 12; // Tamanho padrão das pedras
+    const minDistFromBase = Math.max(240, base.r * 16);
+    const minDistBetweenStones = 40; // Distância mínima entre pedras
+    const maxAttempts = 50;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Posição aleatória
+      const x = 40 + rng.float(0, w - 80);
+      const y = 40 + rng.float(0, h - 80);
+
+      // Verifica distância da base
+      if (this._distance(x, y, base.x, base.y) < minDistFromBase) {
+        continue;
+      }
+
+      // Verifica colisão com obstáculos
+      const collidesObstacle = obstacles.some((o) =>
+        this._rectCircleOverlap(o, { x, y, r })
+      );
+      if (collidesObstacle) continue;
+
+      // Verifica distância de outras pedras
+      const tooCloseToStone = existingStones.some((s) => {
+        if (s.quantity <= 0) return false; // Ignora pedras vazias
+        return this._distance(x, y, s.x, s.y) < minDistBetweenStones;
+      });
+      if (tooCloseToStone) continue;
+
+      // Posição válida encontrada!
+      return {
+        x,
+        y,
+        r,
+        quantity: initialQuantity,
+        initialQuantity: initialQuantity,
+      };
+    }
+
+    // Não conseguiu encontrar posição válida
+    return null;
+  },
+
   // Usa utilitários geométricos centralizados
   _distance: GeometryUtils.distance,
   _distanceToBase(x: number, y: number, base: Base): number {
@@ -160,10 +316,18 @@ const MapGeneratorImpl = {
       b.y + b.h < a.y
     );
   },
+  _rectOverlapWithMargin(a: Rect, b: Rect, margin: number): boolean {
+    return !(
+      a.x + a.w + margin < b.x ||
+      b.x + b.w + margin < a.x ||
+      a.y + a.h + margin < b.y ||
+      b.y + b.h + margin < a.y
+    );
+  },
   _rectCircleOverlap: GeometryUtils.rectCircleOverlap,
 };
 
 // Exporta para uso global
 if (typeof window !== "undefined") {
-  (window as any).MapGenerator = MapGeneratorImpl;
+  (window as unknown as WindowType).MapGenerator = MapGeneratorImpl;
 }

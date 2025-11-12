@@ -46,9 +46,21 @@ const GeometryUtilsImpl = {
     if (t2 >= 0) return t2;
     return null;
   },
+
+  normalizeAngle(angle: number): number {
+    // Normaliza o ângulo para o intervalo [-PI, PI]
+    const TWO_PI = Math.PI * 2;
+    let normalized = angle % TWO_PI;
+    if (normalized > Math.PI) {
+      normalized -= TWO_PI;
+    } else if (normalized < -Math.PI) {
+      normalized += TWO_PI;
+    }
+    return normalized;
+  },
 };
 
 // Exporta para uso global
 if (typeof window !== "undefined") {
-  (window as any).GeometryUtils = GeometryUtilsImpl;
+  (window as unknown as WindowType).GeometryUtils = GeometryUtilsImpl;
 }

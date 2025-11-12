@@ -38,13 +38,6 @@ interface RewardSystemFull extends RewardSystemInterface {
   _distance(x1: number, y1: number, x2: number, y2: number): number;
 
   // multi-objetivo helpers
-  _calculateStage(agent: Agent): number;
-  _calculateStagePoints(
-    agent: Agent,
-    actionInfo: ActionResult,
-    world: World,
-    stage: number
-  ): number;
   _calculateMultiObjectiveMetrics(
     agents: Agent[],
     world: World
@@ -62,7 +55,7 @@ const RewardSystemImpl: RewardSystemFull = {
   _populationStats: { avgWrongMines: 0, avgExperience: 0 },
 
   REWARDS: {
-    STONE_PICKED: 2000,
+    STONE_PICKED: 8000, // Aumentado para dominar bônus incrementais
     STONE_DELIVERED: 5000,
     CORRECT_MINE_ATTEMPT: 2,
     CORRECT_DEPOSIT_ATTEMPT: 1,
@@ -72,14 +65,14 @@ const RewardSystemImpl: RewardSystemFull = {
     IMMOBILE_COST: -0.5,
     BOUNDARY_COLLISION: -6,
     OBSTACLE_COLLISION: -8,
-    ALIVE_BONUS: 0.01,
-    RETURN_TO_BASE_BONUS: 100,
+    ALIVE_BONUS: 0.005,
+    RETURN_TO_BASE_BONUS: 50,
     BASE_PROXIMITY_THRESHOLD: 80,
-    CARRYING_BONUS: 10,
-    EXPLORATION_BONUS: 20,
+    CARRYING_BONUS: 5,
+    EXPLORATION_BONUS: 10,
     PROXIMITY_MULTIPLIER: {
-      CARRYING_TO_BASE: 15,
-      SEEKING_STONES: 5,
+      CARRYING_TO_BASE: 8,
+      SEEKING_STONES: 2,
     },
   },
 
@@ -234,46 +227,41 @@ const RewardSystemImpl: RewardSystemFull = {
       }
     }
 
-    const stage = this._calculateStage(agent);
-    const stagePoints = this._calculateStagePoints(
-      agent,
-      actionInfo,
-      world,
-      stage
-    );
-    return stage * 10000 + Math.max(0, Math.min(9999, stagePoints));
-  },
+    // FITNESS CONTÍNUO - ações importantes dominam
+    let fitness = 0;
 
-  _calculateStage(agent: Agent): number {
-    if (agent.deliveries >= 3) return 5;
-    if (agent.deliveries >= 2) return 4;
-    if (agent.deliveries === 1) return 3;
-    if (agent.state === "CARRYING" && agent.hasMinedBefore) return 2;
-    if (agent.hasMinedBefore || agent.hasLeftBase) return 1;
-    return 0;
-  },
+    // Entregas valem MUITO
+    // Progressão: 0→0, 1→3000, 2→8000, 3→15000
+    fitness += agent.deliveries * 3000 + Math.pow(agent.deliveries, 2) * 1000;
 
-  _calculateStagePoints(
-    agent: Agent,
-    actionInfo: ActionResult,
-    world: World
-  ): number {
-    let points = 0;
+    // Bônus de eficiência acumulado (entregas rápidas)
+    fitness += agent.totalEfficiencyBonus;
 
-    points += this.calculateActionRewards(agent, actionInfo, world);
-    points += this.calculateImmobilityPenalty(agent);
-    points += this.calculateProximityBonus(agent, world);
-    points += this.calculateReturnToBaseBonus(agent, world);
+    // PENALIDADE por carregar sem entregar (crescente e agressiva)
+    if (agent.state === "CARRYING") {
+      // Penalidade mais agressiva
+      const carryingPenalty = -0.5 * Math.pow(agent.stepsCarrying, 1.5);
+      fitness += carryingPenalty;
+    }
+
+    // Pontos de ações importantes (pegar pedra vale MUITO)
+    fitness += this.calculateActionRewards(agent, actionInfo, world);
+
+    // Pontos incrementais REDUZIDOS (só para aprendizado inicial)
+    fitness += this.calculateImmobilityPenalty(agent);
+    fitness += this.calculateProximityBonus(agent, world) * 0.5; // Reduzido 50%
+    fitness += this.calculateReturnToBaseBonus(agent, world) * 0.5; // Reduzido 50%
 
     if (
       typeof MemorySystem !== "undefined" &&
       MemorySystem?.calculateMemoryBonus
     ) {
-      points += MemorySystem.calculateMemoryBonus(agent, world);
+      fitness += MemorySystem.calculateMemoryBonus(agent, world);
     }
 
-    points += this.REWARDS.ALIVE_BONUS;
-    return points;
+    fitness += this.REWARDS.ALIVE_BONUS;
+
+    return Math.max(0, fitness);
   },
 
   evaluatePopulation(agents: Agent[], world: World): Agent[] {
@@ -410,5 +398,5 @@ const RewardSystemImpl: RewardSystemFull = {
 };
 
 if (typeof window !== "undefined") {
-  (window as any).RewardSystem = RewardSystemImpl;
+  (window as unknown as WindowType).RewardSystem = RewardSystemImpl;
 }

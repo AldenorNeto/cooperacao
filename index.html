@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
@@ -14,6 +14,7 @@
         <h3>Miner Evolution - Enhanced</h3>
         <div class="row">
           <button id="btnStart">Start</button>
+          <button id="btnPause">Pause</button>
           <button id="btnReset" class="ghost">Reset</button>
           <button id="btnDebug" class="debug">Debug Mode</button>
         </div>
@@ -23,17 +24,50 @@
           <div class="small">Sigma: <span id="configSigma">0.15</span></div>
           <div class="small">Gen Time: <span id="configGenTime">30</span>s</div>
           <div class="small">Speed: <span id="configSpeed">5</span></div>
-          <div class="small">Stones Delivered: <span id="stonesDelivered">0</span></div>
+          <div class="small">
+            Stones Delivered: <span id="stonesDelivered">0</span>
+          </div>
         </div>
 
         <div class="controls-section">
           <div class="control-group">
-            <label for="genTimeRange" class="small">Gen Time (s): <span id="genTimeValue">30</span></label>
-            <input type="range" id="genTimeRange" min="10" max="120" value="30" step="5">
+            <label for="speedRange" class="small"
+              >Velocidade: <span id="speedValue">5</span>x</label
+            >
+            <input
+              type="range"
+              id="speedRange"
+              min="1"
+              max="20"
+              value="5"
+              step="1"
+            />
           </div>
           <div class="control-group">
-            <label for="stepsRange" class="small">Steps/Gen: <span id="stepsValue">1800</span></label>
-            <input type="range" id="stepsRange" min="600" max="3600" value="1800" step="100">
+            <label for="genTimeRange" class="small"
+              >Gen Time (s): <span id="genTimeValue">30</span></label
+            >
+            <input
+              type="range"
+              id="genTimeRange"
+              min="10"
+              max="120"
+              value="30"
+              step="5"
+            />
+          </div>
+          <div class="control-group">
+            <label for="stepsRange" class="small"
+              >Steps/Gen: <span id="stepsValue">1800</span></label
+            >
+            <input
+              type="range"
+              id="stepsRange"
+              min="600"
+              max="3600"
+              value="1800"
+              step="100"
+            />
           </div>
         </div>
 
@@ -47,10 +81,26 @@
         <div style="height: 8px"></div>
 
         <div id="debugBox" class="monos"></div>
-        
+
         <!-- Debug Panel -->
-        <div id="debugPanel" class="debug-panel" style="display: none;">
-          <h4>Debug Mode - Single Agent Analysis</h4>
+        <div id="debugPanel" class="debug-panel" style="display: none">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 12px;
+            "
+          >
+            <h4 style="margin: 0">Debug Mode - Single Agent Analysis</h4>
+            <button
+              id="btnDownloadDebug"
+              class="btn-download"
+              title="Download debug data"
+            >
+              📥 Download
+            </button>
+          </div>
           <div id="agentInfo" class="debug-section">
             <div class="debug-row">
               <span>Position:</span> <span id="agentPos">0, 0</span>
@@ -65,27 +115,32 @@
               <span>State:</span> <span id="agentState">SEEK</span>
             </div>
             <div class="debug-row">
-              <span>Carry:</span> <span id="agentCarry">false</span>
+              <span>Carrying:</span> <span id="agentCarry">false</span>
             </div>
             <div class="debug-row">
               <span>Fitness:</span> <span id="agentFitness">0</span>
             </div>
           </div>
-          
+
           <div id="sensorInfo" class="debug-section">
-            <h5>Sensor Inputs</h5>
+            <h5>Sensor Data (Detailed)</h5>
             <div id="sensorValues"></div>
           </div>
-          
+
           <div id="networkInfo" class="debug-section">
-            <h5>Neural Network</h5>
+            <h5>Neural Network I/O</h5>
             <div id="networkInputs"></div>
             <div id="networkOutputs"></div>
           </div>
-          
+
           <div id="networkCanvas" class="debug-section">
             <h5>Network Visualization</h5>
             <canvas id="neuralCanvas" width="300" height="200"></canvas>
+          </div>
+
+          <div id="historyChart" class="debug-section">
+            <h5>Memory & Angle History</h5>
+            <canvas id="historyCanvas" width="340" height="150"></canvas>
           </div>
         </div>
       </div>
@@ -109,7 +164,7 @@
 
     <!-- Debug System -->
     <script src="js/debugSystem.js"></script>
-    
+
     <!-- Script principal: roda por último e usa os globals -->
     <script src="js/script.js"></script>
   </body>

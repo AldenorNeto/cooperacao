@@ -342,5 +342,5 @@ const ChartManagerImpl: ChartManagerInterface = {
 };
 
 if (typeof window !== "undefined") {
-  (window as any).ChartManager = ChartManagerImpl;
+  (window as unknown as WindowType).ChartManager = ChartManagerImpl;
 }
